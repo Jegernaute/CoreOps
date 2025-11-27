@@ -130,3 +130,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ),
 }
+
+# Імітація відправки листів (виводить текст листа в термінал)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST_USER = 'support@coreops.com' # Від кого нібито прийде лист
