@@ -14,7 +14,7 @@ from django.conf import settings
 User = get_user_model()
 
 
-class MeView(generics.RetrieveUpdateAPIView):
+class MeView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET /users/me/ -> Отримати свій профіль
     PATCH /users/me/ -> Оновити (аватар, телефон тощо)
@@ -25,6 +25,14 @@ class MeView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         # Повертає поточного залогіненого юзера
         return self.request.user
+
+    def perform_destroy(self, instance):
+        """
+        Юзер хоче видалити свій акаунт.
+        Ми не видаляємо запис, а просто деактивуємо його.
+        """
+        instance.is_active = False
+        instance.save()
 
 
 class CreateInvitationView(generics.CreateAPIView):

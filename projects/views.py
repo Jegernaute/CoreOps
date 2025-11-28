@@ -3,21 +3,35 @@ from rest_framework.response import Response
 from django.db import transaction
 from .models import Project, ProjectMember
 from .serializers import ProjectSerializer, ProjectCreateSerializer
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 
 class ProjectViewSet(viewsets.ModelViewSet):
     """
     Повний CRUD для проєктів.
     GET /projects/ -> Список проєктів, де я учасник.
     POST /projects/ -> Створити новий.
-    GET /projects/{id}/ -> Деталі.
+    GET, PATCH, PUT /projects/{id}/ -> Деталі.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         # Повертаємо тільки ті проєкти, де користувач є учасником
         user = self.request.user
-        return Project.objects.filter(members__user=user).distinct()
+        queryset = Project.objects.filter(members__user=user).distinct()
+        # Фільтрація: Якщо фронтенд не просить конкретно archived, показуємо тільки активні
+        # Приклад запиту: /projects/?show_archived=true
+        show_archived = self.request.query_params.get('show_archived')
+
+        if not show_archived:
+            # Виключаємо архівовані (показуємо Active, On Hold, Completed)
+            queryset = queryset.exclude(status=Project.STATUS_ARCHIVED)
+
+        return queryset
 
     def get_serializer_class(self):
         # Для створення використовуємо спрощений серіалізатор
@@ -41,3 +55,37 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 user=self.request.user,
                 role=ProjectMember.ROLE_OWNER
             )
+
+    def perform_destroy(self, instance):
+        """
+        Реалізація Soft Delete (М'яке видалення).
+        Замість фізичного видалення з БД, ми змінюємо статус на ARCHIVED.
+        """
+        # Перевірка: тільки власник може архівувати
+        if instance.owner != self.request.user:
+            raise PermissionDenied("Тільки власник може архівувати проєкт.")
+
+        instance.status = instance.STATUS_ARCHIVED
+        instance.save()
+
+    @action(detail=True, methods=['delete'], url_path='remove_member/(?P<user_id>\d+)')
+    def remove_member(self, request, pk=None, user_id=None):
+        """
+        Видалення учасника з проєкту.
+        URL: DELETE /api/v1/projects/{id}/remove_member/{user_id}/
+        """
+        project = self.get_object()
+
+        # 1. Перевірка прав: тільки Owner може видаляти людей
+        if project.owner != request.user:
+            return Response({"error": "Тільки власник може керувати командою."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Не можна видалити самого себе (власника)
+        if int(user_id) == project.owner.id:
+            return Response({"error": "Власник не може видалити себе з проєкту."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Шукаємо і видаляємо запис у ProjectMember
+        member_record = get_object_or_404(ProjectMember, project=project, user_id=user_id)
+        member_record.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

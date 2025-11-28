@@ -5,7 +5,7 @@ from .views import ProjectViewSet
 # Router автоматично створить URL:
 # GET /projects/
 # POST /projects/
-# GET /projects/{id}/
+# GET, PATCH, PUT /projects/{id}/
 router = DefaultRouter()
 router.register(r'', ProjectViewSet, basename='project')
 

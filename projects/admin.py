@@ -22,7 +22,7 @@ class ProjectMilestoneInline(admin.TabularInline):
 # --- Головні адмінки ---
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'key', 'owner', 'status', 'priority', 'end_date')
+    list_display = ('id', 'name', 'key', 'owner', 'status', 'priority', 'end_date')
     list_filter = ('status', 'priority')
     search_fields = ('name', 'key', 'description')
 
@@ -32,7 +32,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectMember)
 class ProjectMemberAdmin(admin.ModelAdmin):
-    list_display = ('project', 'user', 'role', 'joined_at')
+    list_display = ('id', 'project', 'user', 'role', 'joined_at')
     list_filter = ('role', 'project')
 
 
