@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -131,6 +132,15 @@ REST_FRAMEWORK = {
     ),
 }
 
-# Імітація відправки листів (виводить текст листа в термінал)
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-EMAIL_HOST_USER = 'support@coreops.com' # Від кого нібито прийде лист
+
+# --- Email Configuration (Gmail) ---
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+#  логін у Gmail
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+#  SMTP-ключ
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+# Від кого приходитимуть листи
+DEFAULT_FROM_EMAIL = f'CoreOps System <{EMAIL_HOST_USER}>'

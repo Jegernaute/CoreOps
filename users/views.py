@@ -108,7 +108,7 @@ class PasswordResetRequestView(generics.GenericAPIView):
                 fail_silently=False,
             )
 
-            return Response({"message": "Посилання на відновлення відправлено на Email (дивіться консоль!)"},
+            return Response({"message": "Посилання на відновлення відправлено на Email"},
                             status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
