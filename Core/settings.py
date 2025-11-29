@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'tasks',
     'planning',
     'analytics' ,
+    'notifications',
     'rest_framework',
     'drf_spectacular',
 ]

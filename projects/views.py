@@ -86,6 +86,24 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         # 3. Шукаємо і видаляємо запис у ProjectMember
         member_record = get_object_or_404(ProjectMember, project=project, user_id=user_id)
+
+        # Очищення задач (Unassign tasks) ---
+        from tasks.models import Task  # Імпорт всередині, щоб уникнути циркулярних помилок
+
+        # Знаходимо всі задачі цього юзера В ЦЬОМУ проєкті, які ще не зроблені
+        user_tasks = Task.objects.filter(
+            project=project,
+            assignee_id=user_id
+        ).exclude(status='done')  # (Опціонально: закриті задачі можна залишити "для історії", або теж очистити)
+
+        # Очищаємо поле assignee
+        updated_count = user_tasks.update(assignee=None)
+        # ----------------------------------------------------
+
+        # 3. Видаляємо учасника
         member_record.delete()
 
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            {"message": f"Користувача видалено. {updated_count} задач тепер без виконавця."},
+            status=status.HTTP_200_OK
+        )

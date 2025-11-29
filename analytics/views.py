@@ -21,6 +21,16 @@ class ProjectDashboardView(views.APIView):
 
         # 2. Збираємо дані
         tasks = Task.objects.filter(project_id=project_id)
+        # --- Аналіз завантаженості (Workload) ---
+        # Рахуємо тільки активні задачі (не Done) для кожного виконавця
+        workload = tasks.exclude(status='done').values(
+            'assignee__id',
+            'assignee__email',
+            'assignee__first_name',
+            'assignee__last_name'
+        ).annotate(
+            active_tasks=Count('id')
+        ).order_by('-active_tasks')
         total_tasks = tasks.count()
         completed_tasks = tasks.filter(status=Task.STATUS_DONE).count()
 
@@ -47,7 +57,8 @@ class ProjectDashboardView(views.APIView):
                 "critical_tasks": critical_count
             },
             "charts": {
-                "status_distribution": status_distribution
+                "status_distribution": status_distribution,
+                "team_workload": workload
             }
         }
         return response.Response(data)

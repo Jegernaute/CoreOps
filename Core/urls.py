@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/v1/tasks/', include('tasks.urls')), # <--- Підключаємо tasks шляхи
     path('api/v1/planning/', include('planning.urls')),  # <--- Підключаємо planning шляхи
     path('api/v1/analytics/', include('analytics.urls')), # <--- Підключаємо analytics шляхи
+    path('api/v1/notifications/', include('notifications.urls')),# <--- Підключаємо notifications шляхи
 
     # --- SWAGGER ---
     # 1. Файл схеми (потрібен для роботи UI)
