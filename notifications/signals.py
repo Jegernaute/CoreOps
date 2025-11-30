@@ -4,7 +4,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from tasks.models import Task
 from .models import Notification
-
+from .tasks import send_email_async
 
 @receiver(post_save, sender=Task)
 def notify_assignee(sender, instance, created, **kwargs):
@@ -36,15 +36,20 @@ def notify_assignee(sender, instance, created, **kwargs):
         notification_type=Notification.TYPE_INFO
     )
 
-    # 2. Відправляємо Email
-    try:
-        send_mail(
-            subject=f"CoreOps: {title}",
-            message=f"Вітаємо, {instance.assignee.first_name}!\n\n{message}\n\nУспіхів у роботі!",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[instance.assignee.email],
-            fail_silently=True  # Щоб не впав сервер, якщо гугл затупить
-        )
-        print(f"Email sent to {instance.assignee.email}")
-    except Exception as e:
-        print(f"Email error: {e}")
+    # 2. Асинхронна відправка Email
+
+    email_subject = f"CoreOps: {instance.title}"
+    email_body = (
+        f"Вітаємо, {instance.assignee.first_name}!\n\n"
+        f"Ви призначені на задачу: {instance.title}\n"
+        f"Проєкт: {instance.project.name}\n"
+        f"Пріоритет: {instance.priority}\n"
+        f"Дедлайн: {instance.due_date}"
+    )
+
+    # .delay() - магічна команда, яка відправляє лист в редіс для подальшої обробки
+    send_email_async.delay(
+        subject=email_subject,
+        message=email_body,
+        recipient_list=[instance.assignee.email]
+    )

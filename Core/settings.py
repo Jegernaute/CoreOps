@@ -34,7 +34,18 @@ INSTALLED_APPS = [
     'notifications',
     'rest_framework',
     'drf_spectacular',
+    'django_celery_beat',
 ]
+
+# --- CELERY SETTINGS ---
+# Використовуємо localhost, бо порт 6379 прокинутий з докера на машину
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0' # Або 'django-db'
+
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Kyiv'
 
 AUTH_USER_MODEL = 'users.CustomUser'  # Вказуємо нашу модель
 
@@ -145,3 +156,11 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 # Від кого приходитимуть листи
 DEFAULT_FROM_EMAIL = f'CoreOps System <{EMAIL_HOST_USER}>'
+
+# В самому кінці файлу
+CELERY_BEAT_SCHEDULE = {
+    'check-deadlines-every-minute': {
+        'task': 'tasks.tasks.check_deadlines_periodic',
+        'schedule': 60.0, # Перевіряти кожну хвилину (для тесту)
+    },
+}

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  # Наш брокер повідомлень
+  redis:
+    image: redis:7-alpine
+    container_name: coreops_redis
+    ports:
+      - "6379:6379"  # Прокидаємо порт назовні, щоб локальний Django його бачив
+    volumes:
+      - redis_data:/data # Щоб дані не зникали при перезапуску
+    restart: always
+
+volumes:
+  redis_data:

@@ -10,6 +10,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.conf import settings
+from notifications.tasks import send_email_async
 
 User = get_user_model()
 
@@ -102,22 +103,18 @@ class PasswordResetRequestView(generics.GenericAPIView):
             token = PasswordResetTokenGenerator().make_token(user)
 
             # 2. Формуємо "посилання" (для фронтенду)
-            # У реальності це було б: https://my-frontend.com/reset/{uidb64}/{token}/
             reset_link = f"http://localhost:3000/reset-password/{uidb64}/{token}/"
 
-            # 3. Відправляємо лист (у нашому випадку - в консоль)
+            # 3. Відправляємо лист
             email_body = f"Привіт, {user.first_name}!\n\nВи (або хтось інший) запросили зміну пароля.\nВикористовуйте це посилання:\n{reset_link}\n\nЯкщо ви цього не робили, просто ігноруйте цей лист."
 
-            send_mail(
+            send_email_async.delay(
                 subject="Відновлення пароля CoreOps",
                 message=email_body,
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[email],
-                fail_silently=False,
+                recipient_list=[email]
             )
 
-            return Response({"message": "Посилання на відновлення відправлено на Email"},
-                            status=status.HTTP_200_OK)
+            return Response({"message": "Посилання відправлено"}, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
