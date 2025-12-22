@@ -1,11 +1,14 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import MeView, CreateInvitationView, RegisterByInviteView, PasswordResetRequestView, PasswordResetConfirmView
+from .views import MeView, CreateInvitationView, RegisterByInviteView, PasswordResetRequestView, \
+    PasswordResetConfirmView, UserListView
 
 urlpatterns = [
     # Auth (JWT)
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # Логін
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Оновлення токена
+
+    path('', UserListView.as_view(), name='user_list'), # Додав пошук сюди (просто /users/)
 
     # Users Logic
     path('me/', MeView.as_view(), name='user_me'), # Мій профіль

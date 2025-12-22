@@ -2,11 +2,12 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from django.db import transaction
 from .models import Project, ProjectMember
-from .serializers import ProjectSerializer, ProjectCreateSerializer
+from .serializers import ProjectSerializer, ProjectCreateSerializer, AddProjectMemberSerializer
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+
 
 User = get_user_model()
 
@@ -68,6 +69,52 @@ class ProjectViewSet(viewsets.ModelViewSet):
         instance.status = instance.STATUS_ARCHIVED
         instance.save()
 
+    @action(detail=True, methods=['post'], url_path='add_member')
+    def add_member(self, request, pk=None):
+        """
+        Додавання учасника до проєкту за EMAIL.
+        URL: POST /api/v1/projects/{id}/add_member/
+        Body: { "email": "developer@example.com", "role": "member" }
+        """
+        project = self.get_object()
+
+        # 1. Перевірка прав: тільки Owner може додавати людей
+        if project.owner != request.user:
+            return Response(
+                {"error": "Тільки власник проєкту може додавати учасників."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. Валідація
+        serializer = AddProjectMemberSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            role = serializer.validated_data['role']
+
+            # Знаходимо користувача (він точно є, серіалізатор перевірив)
+            user = User.objects.get(email=email)
+
+            # 3. Перевірка на дублікат
+            if ProjectMember.objects.filter(project=project, user=user).exists():
+                return Response(
+                    {"error": f"Користувач {email} вже є в команді."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 4. Створення запису
+            ProjectMember.objects.create(
+                project=project,
+                user=user,
+                role=role
+            )
+
+            return Response(
+                {"message": f"Користувача {user.get_full_name()} ({email}) успішно додано."},
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=True, methods=['delete'], url_path='remove_member/(?P<user_id>\d+)')
     def remove_member(self, request, pk=None, user_id=None):
         """
@@ -107,3 +154,4 @@ class ProjectViewSet(viewsets.ModelViewSet):
             {"message": f"Користувача видалено. {updated_count} задач тепер без виконавця."},
             status=status.HTTP_200_OK
         )
+

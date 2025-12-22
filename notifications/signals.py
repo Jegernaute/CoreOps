@@ -3,6 +3,7 @@ from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.conf import settings
 from tasks.models import Task
+from users.models import Invitation
 from .models import Notification
 from .tasks import send_email_async
 
@@ -53,3 +54,33 @@ def notify_assignee(sender, instance, created, **kwargs):
         message=email_body,
         recipient_list=[instance.assignee.email]
     )
+
+
+@receiver(post_save, sender=Invitation)
+def send_invitation_email(sender, instance, created, **kwargs):
+    """
+    Автоматично відправляє лист із посиланням при створенні інвайту.
+    """
+    if created and not instance.is_used:
+        # Формуємо посилання.
+        # У реальному житті тут буде адреса Frontend (React/Vue), наприклад:
+        # link = f"http://localhost:3000/register?token={instance.token}"
+        # Але поки  тільки API,  посилання буде просто текстом або на Swagger:
+
+        register_link = f"http://127.0.0.1:8000/api/users/register-by-invite/?token={instance.token}"
+
+        subject = "Запрошення до системи CoreOps"
+        message = (
+            f"Вітаємо!\n\n"
+            f"Адміністратор запросив вас приєднатися до робочого простору CoreOps.\n"
+            f"Для завершення реєстрації перейдіть за посиланням:\n\n"
+            f"{register_link}\n\n"
+            f"Або скопіюйте ваш токен вручну: {instance.token}"
+        )
+
+        # Відправляємо асинхронно через Celery
+        send_email_async.delay(
+            subject=subject,
+            message=message,
+            recipient_list=[instance.email]
+        )

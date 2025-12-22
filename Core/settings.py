@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
+from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -9,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*#(mjf3l$@i-)ssn3*#p=$%uzyr2=xu)v8yulj=kvc21%7b(8j'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -45,9 +47,11 @@ CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0' # Або 'django-db'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+# Часовий пояс для Django
+TIME_ZONE = 'Europe/Kyiv'
 CELERY_TIMEZONE = 'Europe/Kyiv'
 
-AUTH_USER_MODEL = 'users.CustomUser'  # Вказуємо нашу модель
+AUTH_USER_MODEL = 'users.CustomUser'  # Вказуємо нашу модель для авторезування
 
 
 MIDDLEWARE = [
@@ -115,8 +119,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
-
 USE_I18N = True
 
 USE_TZ = True
@@ -139,11 +141,20 @@ REST_FRAMEWORK = {
         # Цей рядок вчить Django розуміти "Bearer" токени
         'rest_framework_simplejwt.authentication.JWTAuthentication',
 
-        # (Опціонально) Залиште це, якщо хочете, щоб працювала адмінка через браузер
+        # (Опціонально) Залишити це, якщо треба, щоб працювала адмінка через браузер
         'rest_framework.authentication.SessionAuthentication',
     ),
 }
 
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Було 5 хв, стало 1 година
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Токен для оновлення живе добу
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+
+    # Інші налаштування можна залишити стандартними
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
 
 # --- Email Configuration (Gmail) ---
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -157,10 +168,11 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 # Від кого приходитимуть листи
 DEFAULT_FROM_EMAIL = f'CoreOps System <{EMAIL_HOST_USER}>'
 
-# В самому кінці файлу
+
 CELERY_BEAT_SCHEDULE = {
     'check-deadlines-every-minute': {
         'task': 'tasks.tasks.check_deadlines_periodic',
-        'schedule': 60.0, # Перевіряти кожну хвилину (для тесту)
+        # Запускати щодня о 9:00 ранку
+        'schedule': crontab(hour=9, minute=0),
     },
 }

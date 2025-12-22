@@ -83,3 +83,14 @@ class SetNewPasswordSerializer(serializers.Serializer):
 
         attrs['user'] = user # Зберігаємо юзера, щоб використати у View
         return attrs
+
+class UserSummarySerializer(serializers.ModelSerializer):
+    """
+    Полегшений серіалізатор для пошуку та списків.
+    Повертає тільки публічну інформацію.
+    """
+    full_name = serializers.ReadOnlyField(source='get_full_name')
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'avatar']

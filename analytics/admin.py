@@ -15,6 +15,6 @@ class ProjectActivityLogAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    # Забороняємо видаляти логи (опціонально, залежить від політики компанії)
-    # def has_delete_permission(self, request, obj=None):
-    #     return False
+    # Забороняємо видаляти логи (опціонально)
+    def has_delete_permission(self, request, obj=None):
+        return False

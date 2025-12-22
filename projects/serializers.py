@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import Project, ProjectMember, ProjectResource, ProjectMilestone
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 
 # --- Допоміжні серіалізатори (для вкладеності) ---
 
@@ -25,6 +27,23 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         model = ProjectMember
         fields = ['id', 'user_id', 'user_email', 'user_name', 'role', 'joined_at']
 
+class AddProjectMemberSerializer(serializers.Serializer):
+    """
+    Валідація даних для додавання учасника.
+    Приймаємо ID користувача та роль.
+    """
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=ProjectMember.ROLE_CHOICES)
+
+    def validate_email(self, value):
+        # 1. Нормалізуємо пошту (маленькі літери)
+        email = value.lower().strip()
+
+        # 2. Перевіряємо, чи є такий користувач
+        if not User.objects.filter(email=email).exists():
+            raise serializers.ValidationError("Користувача з таким email не знайдено.")
+
+        return email
 
 # --- Головний серіалізатор Проєкту ---
 

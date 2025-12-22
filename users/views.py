@@ -1,16 +1,15 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from .models import Invitation
-from .serializers import UserSerializer, InvitationSerializer, RegistrationSerializer, SetNewPasswordSerializer, PasswordResetRequestSerializer
+from .serializers import UserSerializer, InvitationSerializer, RegistrationSerializer, SetNewPasswordSerializer, PasswordResetRequestSerializer, UserSummarySerializer
 from django.db import transaction
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
-from django.core.mail import send_mail
-from django.conf import settings
 from notifications.tasks import send_email_async
+
 
 User = get_user_model()
 
@@ -140,3 +139,16 @@ class PasswordResetConfirmView(generics.GenericAPIView):
             return Response({"message": "Пароль успішно змінено! Тепер ви можете увійти."}, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserListView(generics.ListAPIView):
+    """
+    GET /users/ -> Пошук та список активних користувачів
+    """
+    queryset = User.objects.filter(is_active=True)
+    serializer_class = UserSummarySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    # Підключаємо пошук
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['email', 'first_name', 'last_name']
