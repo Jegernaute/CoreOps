@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Task, TaskComment, TaskResource
 from .serializers import TaskSerializer, TaskCommentSerializer, TaskResourceSerializer
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -45,3 +46,44 @@ class TaskViewSet(viewsets.ModelViewSet):
             serializer.save(uploaded_by=request.user, task=task)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def perform_destroy(self, instance):
+        """
+        Розумне видалення (Smart Delete):
+        1. Ніхто не видаляє 'Done' (Історія).
+        2. Project Owner може видаляти будь-які активні задачі.
+        3. Reporter (Автор) може видалити задачу, ТІЛЬКИ якщо вона ще в 'to_do'.
+        """
+        user = self.request.user
+        project_owner = instance.project.owner
+
+        # Визначаємо ролі
+        is_reporter = instance.reporter == user
+        is_owner = user == project_owner
+
+        # --- 1. ПЕРЕВІРКА ЦІЛІСНОСТІ (History Protection) ---
+        # Якщо статус 'done', видаляти не можна нікому.
+        if instance.status == Task.STATUS_DONE:
+            raise ValidationError(
+                {"error": "Неможливо видалити завершену задачу. Це порушить історію проєкту."}
+            )
+
+        # --- 2. ЛОГІКА ВЛАСНИКА (Super Access) ---
+        # Власник проєкту може видалити задачу в будь-якому статусі (крім Done)
+        if is_owner:
+            instance.delete()
+            return  # Успіх
+
+        # --- 3. ЛОГІКА АВТОРА (Mistake Correction) ---
+        # Автор може виправити помилку, тільки поки задача не пішла в роботу
+        if is_reporter:
+            if instance.status == Task.STATUS_TODO:
+                instance.delete()
+                return  # Успіх
+            else:
+                raise PermissionDenied(
+                    "Ви не можете видалити цю задачу, бо робота над нею вже почалася (статус не 'To Do'). Зверніться до менеджера."
+                )
+
+        # --- 4. ВСІ ІНШІ ---
+        raise PermissionDenied("У вас недостатньо прав для видалення цієї задачі.")

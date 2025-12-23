@@ -50,21 +50,36 @@ class TaskSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """
         БІЗНЕС-ЛОГІКА:
-        Перевіряємо, чи є Assignee (Виконавець) учасником цього проєкту.
+        1. Перевіряємо, чи має право АВТОР ЗАПИТУ створювати задачі в цьому проєкті.
+        2. Перевіряємо, чи є ASSIGNEE (Виконавець) учасником цього проєкту.
         """
-        user = data.get('assignee')
-        project = data.get('project')
+        request = self.context.get('request')
+        current_user = request.user
 
-        # Якщо ми оновлюємо задачу (PATCH), project може не прийти, беремо з існуючого
+        # Визначаємо проєкт (з вхідних даних або з існуючого об'єкта)
+        project = data.get('project')
         if not project and self.instance:
             project = self.instance.project
 
-        # Якщо вказано виконавця, перевіряємо його членство
-        if user and project:
-            is_member = ProjectMember.objects.filter(project=project, user=user).exists()
-            if not is_member:
+        # --- ПЕРЕВІРКА 1: Чи "свій" той, хто створює задачу? ---
+        if project:
+            # Перевіряємо, чи є поточний юзер в таблиці учасників або власником
+            is_member = ProjectMember.objects.filter(project=project, user=current_user).exists()
+            # Додаткова страховка: власник завжди має доступ, навіть якщо випадково випав з Member
+            is_owner = project.owner == current_user
+
+            if not (is_member or is_owner):
                 raise serializers.ValidationError(
-                    {"assignee": f"Користувач {user.email} не є учасником проєкту '{project.name}'."}
+                    {"project": "Ви не можете створювати задачі в проєкті, учасником якого ви не є."}
+                )
+
+        # --- ПЕРЕВІРКА 2: Чи "свій" той, на кого вішають задачу? ---
+        assignee = data.get('assignee')
+        if assignee and project:
+            is_assignee_member = ProjectMember.objects.filter(project=project, user=assignee).exists()
+            if not is_assignee_member:
+                raise serializers.ValidationError(
+                    {"assignee": f"Користувач {assignee.email} не є учасником проєкту '{project.name}'."}
                 )
 
         return data
