@@ -1,9 +1,10 @@
-from rest_framework import generics, permissions, status, filters
+from rest_framework import generics, permissions, status, filters, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from .models import Invitation
-from .serializers import UserSerializer, InvitationSerializer, RegistrationSerializer, SetNewPasswordSerializer, PasswordResetRequestSerializer, UserSummarySerializer
+from .serializers import (UserSerializer, InvitationSerializer, RegistrationSerializer, SetNewPasswordSerializer,
+                          PasswordResetRequestSerializer, UserSummarySerializer, UserManageSerializer)
 from django.db import transaction
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes
@@ -76,7 +77,7 @@ class RegisterByInviteView(APIView):
                 invite.is_used = True
                 invite.save()
 
-                return Response({"message": "User created successfully"}, status=status.HTTP_201_CREATED)
+                return Response({"message": "Користувач створений успішно"}, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -140,15 +141,86 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-class UserListView(generics.ListAPIView):
+class UserViewSet(viewsets.ModelViewSet):
     """
-    GET /users/ -> Пошук та список активних користувачів
+    Універсальний контролер:
+    - GET /users/ : Список (для юзерів - тільки активні, для адміна - всі).
+    - PATCH /users/{id}/ : Редагування (Тільки Адмін).
+    - DELETE /users/{id}/ : Деактивація (Тільки Адмін).
     """
-    queryset = User.objects.filter(is_active=True)
-    serializer_class = UserSummarySerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    # Підключаємо пошук
     filter_backends = [filters.SearchFilter]
-    search_fields = ['email', 'first_name', 'last_name']
+    search_fields = ['email', 'first_name', 'last_name', 'job_title', 'phone', 'telegram']
+
+    def get_queryset(self):
+        """
+        Фільтрація:
+        - Адміністратор бачить ВСІХ користувачів (в т.ч. звільнених/заблокованих).
+        - Звичайний користувач бачить тільки АКТИВНИХ колег.
+        """
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return User.objects.all()
+        return User.objects.filter(is_active=True)
+
+    def get_serializer_class(self):
+        # Якщо ми змінюємо дані або створюємо (тільки адмін) - повний доступ
+        if self.action in ['update', 'partial_update', 'create']:
+            return UserManageSerializer
+        # Для списку і перегляду - тільки публічні дані
+        return UserSummarySerializer
+
+    def get_permissions(self):
+        # Адмінські дії
+        if self.action in ['update', 'partial_update', 'destroy', 'create']:
+            return [permissions.IsAdminUser()]
+        # Всі інші (list, retrieve) - для всіх авторизованих
+        return [permissions.IsAuthenticated()]
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft Delete + Очищення робочих хвостів.
+        """
+        user = self.get_object()
+
+        # 1. Захист від самовидалення
+        if user == request.user:
+            return Response(
+                {"error": "Ви не можете деактивувати власний акаунт."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # --- ПОЧАТОК ЛОГІКИ ОЧИЩЕННЯ ---
+
+        # Імпортуємо тут, щоб не було циклічних помилок
+        from tasks.models import Task
+        from projects.models import ProjectMember
+
+        # 2. Знімаємо юзера з активних задач (Assignee -> None)
+        # Шукаємо задачі, які ще НЕ зроблені (To Do, In Progress, Review)
+        active_tasks = Task.objects.filter(
+            assignee=user,
+            status__in=[Task.STATUS_TODO, Task.STATUS_IN_PROGRESS, Task.STATUS_REVIEW]
+        )
+        updated_tasks_count = active_tasks.update(assignee=None)
+
+        # 3. Видаляємо його зі списків учасників проєктів
+        # (Щоб його не можна было вибрати у нових задачах)
+        # Примітка: Це не видаляє проєкти, де він Owner, бо там стоїть on_delete=PROTECT в моделі Project
+        deleted_memberships_count, _ = ProjectMember.objects.filter(user=user).delete()
+
+        # 4. Власне деактивація (Soft Delete)
+        user.is_active = False
+        user.save()
+
+        return Response(
+            {
+                "message": f"Користувача {user.email} деактивовано.",
+                "details": {
+                    "unassigned_tasks": updated_tasks_count,  # Скільки задач стало нічийними
+                    "removed_from_projects": deleted_memberships_count  # Зі скількох проєктів виключено
+                }
+            },
+            status=status.HTTP_200_OK
+        )

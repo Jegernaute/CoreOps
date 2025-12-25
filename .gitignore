@@ -4,3 +4,6 @@ db.sqlite3
 .env
 avatars
 task_attachments
+celerybeat-schedule.bak
+celerybeat-schedule.dat
+celerybeat-schedule.dir

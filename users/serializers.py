@@ -18,7 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
             'avatar', 'job_title', 'phone', 'telegram',
             'global_role'
         ]
-        read_only_fields = ['id', 'email', 'global_role']  # Ці поля юзер не може змінити сам
+        read_only_fields = ['id', 'email', 'global_role', 'job_title']  # Ці поля юзер не може змінити сам
 
 class InvitationSerializer(serializers.ModelSerializer):
     """
@@ -28,6 +28,21 @@ class InvitationSerializer(serializers.ModelSerializer):
         model = Invitation
         fields = ['id', 'email', 'token', 'is_used', 'created_at']
         read_only_fields = ['id', 'token', 'is_used', 'created_at']
+
+    def validate_email(self, value):
+        # 1. Нормалізація (переводимо в нижній регістр)
+        email = value.lower().strip()
+
+        # 2. Перевірка: Чи існує вже користувач з такою поштою?
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError("Користувач з таким email вже зареєстрований в системі.")
+
+        # 3. Перевірка: Чи вже є активний (невикористаний) інвайт на цю пошту?
+        # Це щоб не створювати 10 інвайтів для однієї людини.
+        if Invitation.objects.filter(email=email, is_used=False).exists():
+            raise serializers.ValidationError("На цю пошту вже відправлено активне запрошення. Чекайте реєстрації.")
+
+        return email
 
 class RegistrationSerializer(serializers.Serializer):
     """
@@ -93,4 +108,18 @@ class UserSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'avatar']
+        fields = ['id', 'email', 'full_name', 'avatar', 'job_title', 'phone', 'telegram',]
+
+class UserManageSerializer(serializers.ModelSerializer):
+    """
+    Серіалізатор для Адміністратора.
+    Дозволяє змінювати посаду, роль та статус активності.
+    """
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name',
+            'job_title', 'global_role', 'is_active', # is_active дозволяє банити і розбанити
+            'phone', 'telegram', 'avatar'
+        ]
+        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'telegram', 'avatar']

@@ -29,7 +29,7 @@ class CustomUser(AbstractUser):
 
     # Контакти
     phone = models.CharField(max_length=20, blank=True, verbose_name="Телефон")
-    telegram = models.CharField(max_length=50, blank=True, verbose_name="Telegram (@username)")
+    telegram = models.CharField(max_length=50, blank=True, verbose_name="Telegram (@username)") # пізніше можна переназвати
 
     # Права доступу (Глобальні)
     global_role = models.CharField(
