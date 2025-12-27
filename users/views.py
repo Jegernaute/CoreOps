@@ -58,27 +58,8 @@ class RegisterByInviteView(APIView):
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
         if serializer.is_valid():
-            with transaction.atomic():
-                data = serializer.validated_data
-
-                # 1. Знаходимо інвайт
-                invite = Invitation.objects.get(token=data['token'])
-
-                # 2. Створюємо юзера
-                user = User.objects.create_user(
-                    email=invite.email,
-                    username=invite.email,  # Технічне поле
-                    password=data['password'],
-                    first_name=data['first_name'],
-                    last_name=data['last_name']
-                )
-
-                # 3. Маркуємо інвайт як використаний
-                invite.is_used = True
-                invite.save()
-
+                serializer.save()
                 return Response({"message": "Користувач створений успішно"}, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -130,12 +111,7 @@ class PasswordResetConfirmView(generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.validated_data['user']
-            password = serializer.validated_data['password']
-
-            # Змінюємо пароль
-            user.set_password(password)
-            user.save()
+            serializer.save()
 
             return Response({"message": "Пароль успішно змінено! Тепер ви можете увійти."}, status=status.HTTP_200_OK)
 
@@ -199,10 +175,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # 2. Знімаємо юзера з активних задач (Assignee -> None)
         # Шукаємо задачі, які ще НЕ зроблені (To Do, In Progress, Review)
-        active_tasks = Task.objects.filter(
-            assignee=user,
-            status__in=[Task.STATUS_TODO, Task.STATUS_IN_PROGRESS, Task.STATUS_REVIEW]
-        )
+        active_tasks = Task.objects.filter(assignee=user).exclude(status=Task.STATUS_DONE)
         updated_tasks_count = active_tasks.update(assignee=None)
 
         # 3. Видаляємо його зі списків учасників проєктів

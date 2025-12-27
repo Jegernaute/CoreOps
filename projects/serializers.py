@@ -27,23 +27,36 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         model = ProjectMember
         fields = ['id', 'user_id', 'user_email', 'user_name', 'role', 'joined_at']
 
+
 class AddProjectMemberSerializer(serializers.Serializer):
     """
     Валідація даних для додавання учасника.
-    Приймаємо ID користувача та роль.
+    Тепер перевіряє ВСЕ: і існування пошти, і дублікати.
     """
     email = serializers.EmailField()
     role = serializers.ChoiceField(choices=ProjectMember.ROLE_CHOICES)
 
     def validate_email(self, value):
-        # 1. Нормалізуємо пошту (маленькі літери)
+        """1. Чи існує юзер?"""
         email = value.lower().strip()
-
-        # 2. Перевіряємо, чи є такий користувач
         if not User.objects.filter(email=email).exists():
             raise serializers.ValidationError("Користувача з таким email не знайдено.")
-
         return email
+
+    def validate(self, data):
+        """2. Чи юзер вже в команді? (Cross-field validation)"""
+        email = data['email']
+        # Отримуємо проєкт з контексту (ми передамо його з View)
+        project = self.context.get('project')
+
+        user = User.objects.get(email=email)
+
+        if project and ProjectMember.objects.filter(project=project, user=user).exists():
+            raise serializers.ValidationError({"email": "Цей користувач вже є учасником проєкту."})
+
+        # Додаємо об'єкт user в дані, щоб View не шукав його знову
+        data['user'] = user
+        return data
 
 # --- Головний серіалізатор Проєкту ---
 

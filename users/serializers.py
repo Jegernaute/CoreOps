@@ -4,8 +4,11 @@ from .models import Invitation
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_str
+from django.db import transaction
 
 User = get_user_model()
+
+# --- 1. Основні серіалізатори ---
 
 class UserSerializer(serializers.ModelSerializer):
     """
@@ -18,7 +21,34 @@ class UserSerializer(serializers.ModelSerializer):
             'avatar', 'job_title', 'phone', 'telegram',
             'global_role'
         ]
-        read_only_fields = ['id', 'email', 'global_role', 'job_title']  # Ці поля юзер не може змінити сам
+        read_only_fields = ['id', 'email', 'global_role', 'job_title']
+
+class UserSummarySerializer(serializers.ModelSerializer):
+    """
+    Полегшений серіалізатор для пошуку та списків.
+    Повертає тільки публічну інформацію.
+    """
+    full_name = serializers.ReadOnlyField(source='get_full_name')
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'full_name', 'avatar', 'job_title', 'phone', 'telegram',]
+
+class UserManageSerializer(serializers.ModelSerializer):
+    """
+    Серіалізатор для Адміністратора.
+    Дозволяє змінювати посаду, роль та статус активності.
+    """
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name',
+            'job_title', 'global_role', 'is_active', # is_active дозволяє банити і розбанити
+            'phone', 'telegram', 'avatar'
+        ]
+        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'telegram', 'avatar']
+
+# --- 2. Інвайт та Реєстрація ---
 
 class InvitationSerializer(serializers.ModelSerializer):
     """
@@ -54,13 +84,37 @@ class RegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=True)
     last_name = serializers.CharField(required=True)
 
-    def validate_token(self, value):
+    def validate(self, data):
         """Перевіряємо, чи існує такий активний токен"""
+
+        token = data.get('token')
+
         try:
-            invite = Invitation.objects.get(token=value, is_used=False)
+            invite = Invitation.objects.get(token=token, is_used=False)
         except Invitation.DoesNotExist:
             raise serializers.ValidationError("Недійсний або вже використаний токен запрошення.")
-        return value
+        data['invite'] = invite
+        return data
+
+    def create(self, validated_data):
+        """
+        Логіка створення юзера.
+        """
+        invite = validated_data['invite']
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=invite.email,
+                username=invite.email,
+                password=validated_data['password'],
+                first_name=validated_data['first_name'],
+                last_name=validated_data['last_name']
+            )
+            invite.is_used = True
+            invite.save()
+            return user
+
+# --- 3. Відновлення пароля ---
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     """
@@ -99,27 +153,12 @@ class SetNewPasswordSerializer(serializers.Serializer):
         attrs['user'] = user # Зберігаємо юзера, щоб використати у View
         return attrs
 
-class UserSummarySerializer(serializers.ModelSerializer):
-    """
-    Полегшений серіалізатор для пошуку та списків.
-    Повертає тільки публічну інформацію.
-    """
-    full_name = serializers.ReadOnlyField(source='get_full_name')
-
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'full_name', 'avatar', 'job_title', 'phone', 'telegram',]
-
-class UserManageSerializer(serializers.ModelSerializer):
-    """
-    Серіалізатор для Адміністратора.
-    Дозволяє змінювати посаду, роль та статус активності.
-    """
-    class Meta:
-        model = User
-        fields = [
-            'id', 'email', 'first_name', 'last_name',
-            'job_title', 'global_role', 'is_active', # is_active дозволяє банити і розбанити
-            'phone', 'telegram', 'avatar'
-        ]
-        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'telegram', 'avatar']
+    def save(self):
+        """
+        Крок 3: Встановлення пароля.
+        """
+        user = self.validated_data['user']
+        password = self.validated_data['password']
+        user.set_password(password)
+        user.save()
+        return user
