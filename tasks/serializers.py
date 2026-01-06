@@ -56,30 +56,95 @@ class TaskSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         current_user = request.user
 
-        # Визначаємо проєкт (з вхідних даних або з існуючого об'єкта)
-        project = data.get('project')
-        if not project and self.instance:
-            project = self.instance.project
+        # --- ЛОГІКА СТВОРЕННЯ (Create) ---
+        if not self.instance:
+            # Визначаємо проєкт (з вхідних даних або з існуючого об'єкта)
+            # При створенні (POST) він у data['project'].
+            # При редагуванні (PATCH) він може бути не переданий, тоді беремо з instance.
+            project = data.get('project')
 
-        # --- ПЕРЕВІРКА 1: Чи "свій" той, хто створює задачу? ---
-        if project:
-            # Перевіряємо, чи є поточний юзер в таблиці учасників або власником
-            is_member = ProjectMember.objects.filter(project=project, user=current_user).exists()
-            # Додаткова страховка: власник завжди має доступ, навіть якщо випадково випав з Member
-            is_owner = project.owner == current_user
+            # --- ПЕРЕВІРКА 1: Чи "свій" той, хто створює задачу? ---
 
-            if not (is_member or is_owner):
-                raise serializers.ValidationError(
-                    {"project": "Ви не можете створювати задачі в проєкті, учасником якого ви не є."}
-                )
+            # Якщо це Адмін — він пропускає перевірку "свій/чужий".
+            if current_user.is_staff or current_user.is_superuser:
+                pass
+            else:
+                if project:
+                    # Перевіряємо, чи є поточний юзер в таблиці учасників або власником
+                    is_member = ProjectMember.objects.filter(project=project, user=current_user).exists()
+                    # Додаткова страховка: власник завжди має доступ, навіть якщо випадково випав з Member
+                    is_owner = project.owner == current_user
 
-        # --- ПЕРЕВІРКА 2: Чи "свій" той, на кого вішають задачу? ---
-        assignee = data.get('assignee')
-        if assignee and project:
-            is_assignee_member = ProjectMember.objects.filter(project=project, user=assignee).exists()
-            if not is_assignee_member:
-                raise serializers.ValidationError(
-                    {"assignee": f"Користувач {assignee.email} не є учасником проєкту '{project.name}'."}
-                )
+                    if not (is_member or is_owner):
+                        raise serializers.ValidationError(
+                            {"project": "Ви не можете створювати задачі в проєкті, учасником якого ви не є."}
+                        )
+
+            # --- ПЕРЕВІРКА 2: Чи "свій" той, на кого вішають задачу? ---
+            assignee = data.get('assignee')
+            if assignee and project:
+                is_assignee_member = ProjectMember.objects.filter(project=project, user=assignee).exists()
+                is_assignee_owner = project.owner == assignee  # Страховка: на власника теж можна вішати задачі
+                if not (is_assignee_member or is_assignee_owner):
+                    raise serializers.ValidationError(
+                        {"assignee": f"Користувач {assignee.email} не є учасником проєкту '{project.name}'."}
+                    )
+
+        # --- ЛОГІКА РЕДАГУВАННЯ (Update) ---
+        else:
+            instance = self.instance
+
+            # 1. ЗАХИСТ "DONE" ЗАДАЧ (Immutability)
+            if instance.status == Task.STATUS_DONE:
+                new_status = data.get('status')
+
+                # Якщо юзер намагається змінити щось, НЕ змінюючи статус з Done на інший
+                if new_status == Task.STATUS_DONE or new_status is None:
+                    raise serializers.ValidationError(
+                        "Завершену задачу не можна редагувати. Спочатку відновіть її (змініть статус)."
+                    )
+
+                # Якщо статус змінюється (наприклад, на In Progress) — дозволяємо (це Reopen).
+
+            # 2. ПРАВА ДОСТУПУ (Хто може редагувати?)
+            # Адмін і Власник — можуть все.
+            is_admin = current_user.is_staff or current_user.is_superuser
+            is_project_owner = instance.project.owner == current_user
+
+            if is_admin or is_project_owner:
+                pass
+            else:
+                # Визначаємо ролі
+                is_reporter = instance.reporter == current_user
+                is_assignee = instance.assignee == current_user
+
+                # Якщо ти "лівий" чувак (не автор, не виконавець, не власник)
+                if not (is_reporter or is_assignee):
+                    raise serializers.ValidationError("Ви не маєте прав редагувати цю задачу.")
+
+                # Якщо це Виконавець (але не Автор), він не може змінювати Назву і Опис.
+                if is_assignee and not is_reporter:
+                    # 1. Не можна змінювати суть задачі
+                    if 'title' in data or 'description' in data:
+                        raise serializers.ValidationError(
+                            "Виконавець може змінювати тільки статус. Зверніться до автора для зміни умов."
+                        )
+
+                    # 2. Не можна "скидати" задачу (перепризначати)
+                    if 'assignee' in data:
+                        raise serializers.ValidationError(
+                            "Виконавець не має права перепризначати задачу. Зверніться до менеджера."
+                        )
+
+            # Якщо при редагуванні змінюють виконавця, перевіряємо, чи він з нашої пісочниці
+            new_assignee = data.get('assignee')
+            if new_assignee:
+                project = instance.project
+                is_mem = ProjectMember.objects.filter(project=project, user=new_assignee).exists()
+                is_own = project.owner == new_assignee
+                if not (is_mem or is_own):
+                    raise serializers.ValidationError(
+                        {"assignee": f"Користувач {new_assignee.email} не є учасником проєкту."}
+                    )
 
         return data

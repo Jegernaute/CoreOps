@@ -1,9 +1,11 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Task, TaskComment, TaskResource
 from .serializers import TaskSerializer, TaskCommentSerializer, TaskResourceSerializer
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from django_filters.rest_framework import DjangoFilterBackend
+
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -11,12 +13,35 @@ class TaskViewSet(viewsets.ModelViewSet):
     GET /tasks/ -> Всі задачі (з моїх проєктів).
     POST /tasks/ -> Створити.
     """
+
     serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    # --- ПІДКЛЮЧАЄМО ФІЛЬТРИ ---
+    filter_backends = [
+        DjangoFilterBackend,  # <--- Дозволяє фільтрувати по полях (?status=done)
+        filters.SearchFilter,  # <--- Дозволяє шукати текстом (?search=bug)
+        filters.OrderingFilter  # <--- Дозволяє сортувати (?ordering=-created_at)
+    ]
+
+    # 1. Пошук (Search)
+    search_fields = ['title', 'description']
+
+    # 2. Сортування (Ordering)
+    ordering_fields = ['priority', 'due_date', 'created_at']
+
+    # 3. Фільтрація по полях (Filtering)
+    # Це додасть можливість писати: ?project=1&status=to_do&priority=high
+    filterset_fields = ['project', 'status', 'priority', 'assignee', 'reporter', 'task_type']
+
     def get_queryset(self):
-        # Показуємо тільки задачі з проєктів, де користувач є учасником
+        # Показуємо тільки задачі з проєктів, де користувач є учасником.
+        # Адмін бачить все.
         user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return Task.objects.all()
+
         return Task.objects.filter(project__members__user=user).select_related(
             'project', 'assignee', 'reporter'
         ).distinct()
@@ -60,6 +85,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Визначаємо ролі
         is_reporter = instance.reporter == user
         is_owner = user == project_owner
+        is_admin = user.is_staff or user.is_superuser
 
         # --- 1. ПЕРЕВІРКА ЦІЛІСНОСТІ (History Protection) ---
         # Якщо статус 'done', видаляти не можна нікому.
@@ -70,7 +96,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         # --- 2. ЛОГІКА ВЛАСНИКА (Super Access) ---
         # Власник проєкту може видалити задачу в будь-якому статусі (крім Done)
-        if is_owner:
+        if is_owner or is_admin:
             instance.delete()
             return  # Успіх
 
