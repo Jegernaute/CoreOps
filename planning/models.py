@@ -24,7 +24,7 @@ class Sprint(models.Model):
         verbose_name_plural = "Спринти"
 
     def __str__(self):
-        status = "Active" if self.is_active else "💤"
+        status = "Active" if self.is_active else "zzz"
         return f"{status} {self.name}"
 
     def clean(self):

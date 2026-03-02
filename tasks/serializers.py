@@ -7,8 +7,8 @@ from projects.models import ProjectMember
 class TaskResourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaskResource
-        fields = ['id', 'name', 'resource_type', 'file', 'url', 'created_at']
-        read_only_fields = ['uploaded_by']
+        fields = ['id', 'task', 'name', 'resource_type', 'file', 'url', 'uploaded_by', 'created_at']
+        read_only_fields = ['uploaded_by', 'created_at']
 
 
 class TaskCommentSerializer(serializers.ModelSerializer):
@@ -17,7 +17,7 @@ class TaskCommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskComment
-        fields = ['id', 'author', 'author_name', 'author_avatar', 'content', 'created_at']
+        fields = ['id', 'task', 'author', 'author_name', 'author_avatar', 'content', 'created_at']
         read_only_fields = ['author', 'created_at']
 
 

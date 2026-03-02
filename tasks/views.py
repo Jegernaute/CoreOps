@@ -5,7 +5,8 @@ from .models import Task, TaskComment, TaskResource
 from .serializers import TaskSerializer, TaskCommentSerializer, TaskResourceSerializer
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
-
+from django.db.models import Q
+from .permissions import IsAuthorOrProjectOwnerOrAdmin
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -50,28 +51,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Автоматично ставимо поточного юзера як Автора (Reporter)
         serializer.save(reporter=self.request.user)
 
-    # --- Додатковий метод для додавання коментарів ---
-    # POST /tasks/{id}/add_comment/
-    @action(detail=True, methods=['post'], serializer_class=TaskCommentSerializer)
-    def add_comment(self, request, pk=None):
-        task = self.get_object()
-        serializer = TaskCommentSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(author=request.user, task=task)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    # --- Додатковий метод для завантаження файлів ---
-    # POST /tasks/{id}/upload_resource/
-    @action(detail=True, methods=['post'], serializer_class=TaskResourceSerializer)
-    def upload_resource(self, request, pk=None):
-        task = self.get_object()
-        serializer = TaskResourceSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(uploaded_by=request.user, task=task)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
     def perform_destroy(self, instance):
         """
         Розумне видалення (Smart Delete):
@@ -113,3 +92,84 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         # --- 4. ВСІ ІНШІ ---
         raise PermissionDenied("У вас недостатньо прав для видалення цієї задачі.")
+
+
+class TaskCommentViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для коментарів задачі.
+    GET /comments/?task=5 -> Отримати коментарі конкретної задачі.
+    POST /comments/ -> Створити коментар.
+    """
+    serializer_class = TaskCommentSerializer
+    # Підключаємо базову перевірку токена + нашу кастомну логіку (Автор/Власник/Адмін)
+    permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
+
+    # Підключення фільтрів
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['task']  # Дозволяє фільтрувати по ID задачі
+    ordering_fields = ['created_at']
+
+    # Налаштування get_queryset (Безпека)
+    def get_queryset(self):
+        user = self.request.user
+
+        # Адмін бачить всі коментарі
+        if user.is_staff or user.is_superuser:
+            return TaskComment.objects.all()
+
+        # Звичайний юзер бачить тільки ті, де він учасник проєкту АБО власник проєкту
+        return TaskComment.objects.filter(
+            Q(task__project__members__user=user) | Q(task__project__owner=user)
+        ).distinct()
+
+    # Налаштування perform_create
+    def perform_create(self, serializer):
+        user = self.request.user
+        task = serializer.validated_data['task']
+
+        # Перевірка: чи має цей юзер доступ до цієї задачі?
+        if not (user.is_staff or user.is_superuser):
+            is_member = task.project.members.filter(user=user).exists()
+            is_owner = task.project.owner == user
+            if not (is_member or is_owner):
+                raise PermissionDenied("Ви не можете коментувати задачу з проєкту, до якого не маєте доступу.")
+
+        # Зберігаємо коментар, примусово встановлюючи автора (захист від підробки)
+        serializer.save(author=user)
+
+
+class TaskResourceViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для файлів/ресурсів задачі.
+    GET /resources/?task=5 -> Отримати файли конкретної задачі.
+    POST /resources/ -> Завантажити файл.
+    """
+    serializer_class = TaskResourceSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
+
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['task']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return TaskResource.objects.all()
+
+        return TaskResource.objects.filter(
+            Q(task__project__members__user=user) | Q(task__project__owner=user)
+        ).distinct()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        task = serializer.validated_data['task']
+
+        # Перевірка доступу до задачі
+        if not (user.is_staff or user.is_superuser):
+            is_member = task.project.members.filter(user=user).exists()
+            is_owner = task.project.owner == user
+            if not (is_member or is_owner):
+                raise PermissionDenied("Ви не можете завантажувати файли до задачі з чужого проєкту.")
+
+        # Зберігаємо файл, примусово встановлюючи того, хто завантажив
+        serializer.save(uploaded_by=user)
