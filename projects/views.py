@@ -1,5 +1,7 @@
+import csv
 from django.db.models import Q
 from rest_framework import viewsets, permissions, status, filters
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction
 from .models import Project, ProjectMember
@@ -8,7 +10,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
 from .permissions import IsProjectOwnerOrAdmin
+from Core.pagination import StandardResultsSetPagination
 
 User = get_user_model()
 
@@ -20,6 +24,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     GET, PATCH, PUT /projects/{id}/ -> Деталі.
     """
     permission_classes = [permissions.IsAuthenticated, IsProjectOwnerOrAdmin]
+    pagination_class = StandardResultsSetPagination
 
     # 1. Підключаємо "двигуни" фільтрації
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -165,3 +170,35 @@ class ProjectViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_tasks(self, request, pk=None):
+        """
+        Експорт задач проєкту у форматі CSV.
+        Ендпоінт: GET /api/v1/projects/{id}/export_tasks/
+        """
+        project = self.get_object()  # Отримуємо поточний проєкт
+        tasks = project.tasks.all()  # Дістаємо всі задачі (назва related_name може відрізнятися, перевір у своїй моделі Task)
+
+        # Створюємо HTTP-відповідь спеціально для файлу
+        response = HttpResponse(content_type='text/csv')
+        # Вказуємо браузеру/Postman, що це файл для завантаження, і задаємо ім'я
+        response['Content-Disposition'] = f'attachment; filename="tasks_project_{project.id}.csv"'
+
+        # Ініціалізуємо CSV-writer
+        writer = csv.writer(response)
+
+        # 1. Записуємо заголовки колонок (перший рядок)
+        writer.writerow(['ID', 'Назва', 'Статус', 'Пріоритет', 'Виконавець', 'Створено'])
+
+        # 2. Проходимося циклом по задачах і записуємо дані
+        for task in tasks:
+            writer.writerow([
+                task.id,
+                task.title,
+                task.status,
+                task.priority,
+                task.assignee.email if task.assignee else 'Не призначено',
+                task.created_at.strftime('%Y-%m-%d %H:%M')  # Форматуємо дату
+            ])
+
+        return response

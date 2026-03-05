@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_celery_beat',
     'django_filters',
+    'corsheaders',
 ]
 
 # --- CELERY SETTINGS ---
@@ -63,6 +64,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # ВАЖЛИВО: має бути якомога вище, над CommonMiddleware
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = 'Core.urls'
@@ -145,6 +148,8 @@ REST_FRAMEWORK = {
         # (Опціонально) Залишити це, якщо треба, щоб працювала адмінка через браузер
         'rest_framework.authentication.SessionAuthentication',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 SIMPLE_JWT = {
@@ -177,3 +182,6 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=9, minute=0),
     },
 }
+
+# Для етапу розробки (MVP) дозволяємо запити з будь-яких джерел
+CORS_ALLOW_ALL_ORIGINS = True

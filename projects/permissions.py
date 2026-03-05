@@ -15,5 +15,10 @@ class IsProjectOwnerOrAdmin(permissions.BasePermission):
         if request.user.is_staff or request.user.is_superuser:
             return True
 
-        # 3. Якщо це Власник — дозволяємо редагувати
-        return obj.owner == request.user
+        # 3. Універсальна перевірка власника
+        # Якщо це Project, беремо obj.owner. Якщо це Sprint/Task, беремо obj.project.owner
+        project_owner = getattr(obj, 'owner', None)
+        if not project_owner and hasattr(obj, 'project'):
+            project_owner = obj.project.owner
+
+        return request.user == project_owner

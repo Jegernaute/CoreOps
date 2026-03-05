@@ -6,7 +6,7 @@ class IsAuthorOrProjectOwnerOrAdmin(permissions.BasePermission):
     Кастомний дозвіл для Коментарів та Ресурсів (Файлів):
     - Читання (GET): Дозволено всім (фільтрація відбувається в get_queryset).
     - Редагування (PUT/PATCH): Дозволено ТІЛЬКИ автору об'єкта.
-    - Видалення (DELETE): Дозволено Автору.
+    - Видалення (DELETE): Дозволено Автору, Адміну, Власнику проєкту.
     """
 
     def has_object_permission(self, request, view, obj):

@@ -7,6 +7,13 @@ class Sprint(models.Model):
     """
     Ітерація розробки.
     """
+
+    STATUS_CHOICES = [
+        ('planned', 'Заплановано'),
+        ('active', 'В роботі'),
+        ('completed', 'Завершено'),
+    ]
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='sprints', verbose_name="Проєкт")
     name = models.CharField(max_length=100, verbose_name="Назва спринта")
     goal = models.TextField(blank=True, verbose_name="Ціль спринта")
@@ -14,7 +21,8 @@ class Sprint(models.Model):
     start_date = models.DateField(verbose_name="Дата початку")
     end_date = models.DateField(verbose_name="Дата завершення")
 
-    is_active = models.BooleanField(default=False, verbose_name="Активний")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planned')
+    actual_end_date = models.DateField(null=True, blank=True, help_text="Коли реально завершили спринт")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -24,11 +32,10 @@ class Sprint(models.Model):
         verbose_name_plural = "Спринти"
 
     def __str__(self):
-        status = "Active" if self.is_active else "zzz"
-        return f"{status} {self.name}"
+        return f"{self.name} ({self.get_status_display()}) - {self.project.name}"
 
     def clean(self):
         # Валідація: кінець не може бути раніше початку
 
-        if self.end_date and self.start_date and self.end_date < self.start_date:
-            raise ValidationError("Дата завершення не може бути раніше дати початку.")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValidationError("Дата початку не може бути пізнішою за дату завершення.")
