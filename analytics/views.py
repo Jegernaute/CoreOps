@@ -6,7 +6,7 @@ from .models import ProjectActivityLog
 from .serializers import ActivityLogSerializer 
 from tasks.models import Task
 from projects.models import ProjectMember
-
+from rest_framework import generics
 
 class ProjectDashboardView(views.APIView):
     """
@@ -64,3 +64,27 @@ class ProjectDashboardView(views.APIView):
             }
         }
         return response.Response(data)
+
+class ProjectActivityLogView(generics.ListAPIView):
+    """
+    GET /api/v1/analytics/logs/{project_id}/
+    Повертає історію дій у проєкті (пагіновану).
+    """
+    serializer_class = ActivityLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        project_id = self.kwargs['project_id']
+        user = self.request.user
+
+        # 1. Якщо це адмін - віддаємо всі логи цього проєкту
+        if user.is_staff or user.is_superuser:
+            return ProjectActivityLog.objects.filter(project_id=project_id)
+
+        # 2. Якщо це звичайний юзер - перевіряємо, чи є він учасником або власником
+        return ProjectActivityLog.objects.filter(
+            project_id=project_id
+        ).filter(
+            Q(project__members__user=user) | Q(project__owner=user)
+        ).distinct()

@@ -29,3 +29,13 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def unread_count(self, request):
         count = self.get_queryset().filter(is_read=False).count()
         return Response({'unread_count': count})
+
+    @action(detail=False, methods=['post', 'patch'])
+    def mark_all_read(self, request):
+        unread_notifications = self.get_queryset().filter(is_read=False)
+        updated_count = unread_notifications.update(is_read=True)
+
+        return Response({
+            'status': 'Всі сповіщення прочитані',
+            'updated_count': updated_count
+        })

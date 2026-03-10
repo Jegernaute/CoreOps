@@ -13,7 +13,7 @@ def log_task_changes(sender, instance, created, **kwargs):
     action = ProjectActivityLog.ACTION_CREATED if created else ProjectActivityLog.ACTION_UPDATED
 
     # Хто це зробив?
-    # (Лайфхак: у сигналах важко дістати юзера request.user,
+    # (у сигналах важко дістати юзера request.user,
     # тому для MVP ми будемо брати reporter як автора дії при створенні,
     # або assignee при оновленні, якщо точніше - треба middleware, але для MVP це ок)
     actor = instance.reporter if created else instance.assignee

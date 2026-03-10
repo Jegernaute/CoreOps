@@ -61,7 +61,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # Якщо ми запитуємо конкретний ID (retrieve/update) - показуємо завжди,
         # щоб можна було відновити проєкт.
 
-        if self.action == 'list':  # <--- Додали цю перевірку
+        if self.action == 'list':
             show_archived = self.request.query_params.get('show_archived')
             if not show_archived:
                 queryset = queryset.exclude(status='archived')
