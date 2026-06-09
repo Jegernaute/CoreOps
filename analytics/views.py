@@ -1,12 +1,12 @@
 from rest_framework import viewsets, permissions, views, response
 from django.db.models import Count, Q
 from django.utils import timezone
-from Core.pagination import StandardResultsSetPagination
 from .models import ProjectActivityLog
 from .serializers import ActivityLogSerializer 
 from tasks.models import Task
 from projects.models import ProjectMember
 from rest_framework import generics
+from Core.pagination import CoreCursorPagination
 
 class ProjectDashboardView(views.APIView):
     """
@@ -14,7 +14,6 @@ class ProjectDashboardView(views.APIView):
     Повертає повну статистику для дашборду менеджера.
     """
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
 
     def get(self, request, project_id):
         # 1. Перевіряємо доступ
@@ -72,7 +71,8 @@ class ProjectActivityLogView(generics.ListAPIView):
     """
     serializer_class = ActivityLogSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = CoreCursorPagination
+    ordering = '-timestamp'
 
     def get_queryset(self):
         project_id = self.kwargs['project_id']

@@ -9,7 +9,7 @@ from tasks.models import Task
 from .serializers import SprintSerializer, SprintCompleteSerializer
 from rest_framework.exceptions import PermissionDenied
 from projects.permissions import IsProjectOwnerOrAdmin
-from Core.pagination import StandardResultsSetPagination
+from Core.pagination import CoreCursorPagination
 class SprintViewSet(viewsets.ModelViewSet):
     """
     CRUD для спринтів.
@@ -19,7 +19,7 @@ class SprintViewSet(viewsets.ModelViewSet):
     queryset = Sprint.objects.all()
     serializer_class = SprintSerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectOwnerOrAdmin]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = CoreCursorPagination
 
     def get_queryset(self):
         """

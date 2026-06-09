@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from .permissions import IsProjectOwnerOrAdmin
-from Core.pagination import StandardResultsSetPagination
+from Core.pagination import CoreCursorPagination
 
 User = get_user_model()
 
@@ -24,7 +24,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     GET, PATCH, PUT /projects/{id}/ -> Деталі.
     """
     permission_classes = [permissions.IsAuthenticated, IsProjectOwnerOrAdmin]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = CoreCursorPagination
 
     # 1. Підключаємо "двигуни" фільтрації
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]

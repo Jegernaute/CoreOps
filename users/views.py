@@ -10,7 +10,7 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from notifications.tasks import send_email_async
-
+from Core.pagination import CoreCursorPagination
 
 User = get_user_model()
 
@@ -125,6 +125,9 @@ class UserViewSet(viewsets.ModelViewSet):
     - DELETE /users/{id}/ : Деактивація (Тільки Адмін).
     """
     permission_classes = [permissions.IsAuthenticated]
+
+    pagination_class = CoreCursorPagination
+    ordering = '-date_joined'
 
     filter_backends = [filters.SearchFilter]
     search_fields = ['email', 'first_name', 'last_name', 'job_title', 'phone', 'telegram']

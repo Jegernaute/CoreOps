@@ -7,7 +7,7 @@ from .views import MeView, CreateInvitationView, RegisterByInviteView, PasswordR
 # --- ЛОКАЛЬНИЙ РОУТЕР ---
 # Він створить шляхи:
 # GET / (список)
-# POST / (створення - хоча ми це заборонили правами)
+# POST
 # GET /:id/ (деталі юзера)
 # PATCH /:id/ (редагування юзера)
 # DELETE /:id/ (видалення)

@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from .permissions import IsAuthorOrProjectOwnerOrAdmin
-from Core.pagination import StandardResultsSetPagination
+from Core.pagination import CoreCursorPagination
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -18,7 +18,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = CoreCursorPagination
 
     # --- ПІДКЛЮЧАЄМО ФІЛЬТРИ ---
     filter_backends = [
@@ -105,7 +105,7 @@ class TaskCommentViewSet(viewsets.ModelViewSet):
     serializer_class = TaskCommentSerializer
     # Підключаємо базову перевірку токена + нашу кастомну логіку (Автор/Власник/Адмін)
     permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = CoreCursorPagination
 
     # Підключення фільтрів
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -149,6 +149,7 @@ class TaskResourceViewSet(viewsets.ModelViewSet):
     """
     serializer_class = TaskResourceSerializer
     permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
+    pagination_class = CoreCursorPagination
 
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['task']

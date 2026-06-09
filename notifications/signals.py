@@ -41,7 +41,7 @@ def task_notifications(sender, instance, created, **kwargs):
             Notification.objects.create(
                 recipient=new_assignee,
                 title="Нова задача",
-                message=f"Вас призначено на задачу: {instance.title} (Проєкт: {instance.project.name})",
+                message=f"Вас призначено на задачу #{instance.id} '{instance.title}' (Проєкт: {instance.project.name})",
                 notification_type=Notification.TYPE_INFO
             )
             # Email
@@ -64,7 +64,7 @@ def task_notifications(sender, instance, created, **kwargs):
             Notification.objects.create(
                 recipient=instance.reporter,
                 title="Зміна статусу",
-                message=f"Задача '{instance.title}' змінила статус: {old_status} -> {new_status}",
+                message=f"Задача #{instance.id} '{instance.title}' змінила статус: {old_status} -> {new_status}",
                 notification_type=Notification.TYPE_SUCCESS if new_status == 'done' else Notification.TYPE_INFO
             )
             # Email шлемо тільки якщо задачу виконано (Done)
@@ -102,7 +102,7 @@ def comment_notifications(sender, instance, created, **kwargs):
             Notification.objects.create(
                 recipient=user,
                 title="Новий коментар",
-                message=f"{author.get_full_name()} прокоментував задачу '{task.title}': {instance.content[:50]}...",
+                message=f"{author.get_full_name()} прокоментував задачу #{task.id} '{task.title}': {instance.content[:50]}...",
                 notification_type=Notification.TYPE_INFO
             )
 

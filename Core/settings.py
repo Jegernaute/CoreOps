@@ -148,13 +148,13 @@ REST_FRAMEWORK = {
         # (Опціонально) Залишити це, якщо треба, щоб працювала адмінка через браузер
         'rest_framework.authentication.SessionAuthentication',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'Core.pagination.CoreCursorPagination',
     'PAGE_SIZE': 20,
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Було 5 хв, стало 1 година
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Токен для оновлення живе добу
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
 
