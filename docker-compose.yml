@@ -1,15 +1,30 @@
 version: '3.8'
 
 services:
-  # Наш брокер повідомлень
+  # Брокер повідомлень
   redis:
     image: redis:7-alpine
     container_name: coreops_redis
     ports:
-      - "6379:6379"  # Прокидаємо порт назовні, щоб локальний Django його бачив
+      - "6379:6379"
     volumes:
-      - redis_data:/data # Щоб дані не зникали при перезапуску
+      - redis_data:/data
+    restart: always
+
+# База даних
+  db:
+    image: postgres:15-alpine
+    container_name: coreops_db
+    environment:
+      POSTGRES_DB: coreops_db
+      POSTGRES_USER: coreops_user
+      POSTGRES_PASSWORD: 123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     restart: always
 
 volumes:
   redis_data:
+  postgres_data:

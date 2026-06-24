@@ -93,8 +93,12 @@ WSGI_APPLICATION = 'Core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'coreops_db',
+        'USER': 'coreops_user',
+        'PASSWORD': '123',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
     }
 }
 
@@ -142,10 +146,9 @@ REST_FRAMEWORK = {
     # Вказуємо клас для генерації схеми
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        # Цей рядок вчить Django розуміти "Bearer" токени
         'rest_framework_simplejwt.authentication.JWTAuthentication',
 
-        # (Опціонально) Залишити це, якщо треба, щоб працювала адмінка через браузер
+        # (Опціонально) Залишити це якщо треба щоб працювала адмінка через браузер
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PAGINATION_CLASS': 'Core.pagination.CoreCursorPagination',
@@ -158,7 +161,6 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
 
-    # Інші налаштування можна залишити стандартними
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
@@ -183,5 +185,5 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# Для етапу розробки (MVP) дозволяємо запити з будь-яких джерел
+# Для етапу розробки (MVP) дозволяє запити з будь-яких джерел
 CORS_ALLOW_ALL_ORIGINS = True

@@ -5,7 +5,8 @@ from django.conf import settings
 from tasks.models import Task, TaskComment
 from users.models import Invitation
 from .models import Notification
-from .tasks import send_email_async
+from .tasks import send_email_async, create_notification_async
+
 
 # --- 1. ЛОГІКА ДЛЯ ЗАДАЧ (Розумне відслідковування змін) ---
 
@@ -21,7 +22,7 @@ def store_previous_state(sender, instance, **kwargs):
             instance._old_assignee = old_instance.assignee
             instance._old_status = old_instance.status
         except Task.DoesNotExist:
-            pass # Це створення нової задачі
+            pass # створення нової задачі
 
 
 @receiver(post_save, sender=Task)
@@ -35,14 +36,15 @@ def task_notifications(sender, instance, created, **kwargs):
 
     # Якщо виконавця призначили вперше АБО змінили на іншого
     if new_assignee and (created or new_assignee != old_assignee):
-        # Не спамимо, якщо я призначив сам себе
+        # Не спамить, якщо я призначив сам себе
         if new_assignee != instance.reporter:
             # In-App
-            Notification.objects.create(
-                recipient=new_assignee,
+            # Асинхронний виклик замість прямого блокуючого запису в БД
+            create_notification_async.delay(
+                user_id=new_assignee.id,
                 title="Нова задача",
                 message=f"Вас призначено на задачу #{instance.id} '{instance.title}' (Проєкт: {instance.project.name})",
-                notification_type=Notification.TYPE_INFO
+                notif_type='info'
             )
             # Email
             send_email_async.delay(
@@ -56,18 +58,16 @@ def task_notifications(sender, instance, created, **kwargs):
     old_status = getattr(instance, '_old_status', None)
 
     if not created and new_status != old_status:
-        # Сповіщаємо Автора (Reporter), що статус змінився
+        # Сповіщає Автора (Reporter), що статус змінився
         # Але тільки якщо статус змінив не сам Автор (щоб не було само-сповіщень)
-        # На жаль, у сигналах ми не знаємо 'request.user', тому шлемо завжди, окрім випадку 'done'.
-
         if instance.reporter:
-            Notification.objects.create(
-                recipient=instance.reporter,
+            create_notification_async.delay(
+                user_id=instance.reporter.id,
                 title="Зміна статусу",
                 message=f"Задача #{instance.id} '{instance.title}' змінила статус: {old_status} -> {new_status}",
-                notification_type=Notification.TYPE_SUCCESS if new_status == 'done' else Notification.TYPE_INFO
+                notif_type='success' if new_status == 'done' else 'info'
             )
-            # Email шлемо тільки якщо задачу виконано (Done)
+            # Email надсилає тільки якщо задачу виконано (Done)
             if new_status == 'done':
                 send_email_async.delay(
                     subject=f"CoreOps: Задача виконана!",
@@ -81,7 +81,7 @@ def task_notifications(sender, instance, created, **kwargs):
 @receiver(post_save, sender=TaskComment)
 def comment_notifications(sender, instance, created, **kwargs):
     """
-    При новому коментарі сповіщаємо учасників.
+    При новому коментарі сповіщає учасників.
     """
     if created:
         task = instance.task
@@ -89,21 +89,21 @@ def comment_notifications(sender, instance, created, **kwargs):
 
         recipients = set()
 
-        # 1. Додаємо Виконавця (якщо це не він написав комент)
+        # 1. Додає Виконавця (якщо це не він написав комент)
         if task.assignee and task.assignee != author:
             recipients.add(task.assignee)
 
-        # 2. Додаємо Автора задачі (якщо це не він написав комент)
+        # 2. Додає Автора задачі (якщо це не він написав комент)
         if task.reporter and task.reporter != author:
             recipients.add(task.reporter)
 
-        # Розсилаємо In-App сповіщення (Без Email, щоб не спамити)
+        # Розсилає In-App сповіщення (Без Email, щоб не спамити)
         for user in recipients:
-            Notification.objects.create(
-                recipient=user,
+            create_notification_async.delay(
+                user_id=user.id,
                 title="Новий коментар",
                 message=f"{author.get_full_name()} прокоментував задачу #{task.id} '{task.title}': {instance.content[:50]}...",
-                notification_type=Notification.TYPE_INFO
+                notif_type='info'
             )
 
 
@@ -114,7 +114,7 @@ def send_invitation_email(sender, instance, created, **kwargs):
     Автоматично відправляє лист із посиланням при створенні інвайту.
     """
     if created and not instance.is_used:
-        # Формуємо посилання.
+        # Формує посилання.
         # У реальному житті тут буде адреса Frontend (React/Vue), наприклад:
         # link = f"http://localhost:3000/register?token={instance.token}"
         # Але поки  тільки API,  посилання буде просто текстом або на Swagger:
@@ -130,7 +130,7 @@ def send_invitation_email(sender, instance, created, **kwargs):
             f"Або скопіюйте ваш токен вручну: {instance.token}"
         )
 
-        # Відправляємо асинхронно через Celery
+        # Відправляє асинхронно через Celery
         send_email_async.delay(
             subject=subject,
             message=message,

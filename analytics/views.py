@@ -16,14 +16,14 @@ class ProjectDashboardView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, project_id):
-        # 1. Перевіряємо доступ
+        # 1. Перевіряє доступ
         if not ProjectMember.objects.filter(project_id=project_id, user=request.user).exists():
             return response.Response({"error": "Forbidden"}, status=403)
 
-        # 2. Збираємо дані
+        # 2. Збирає дані
         tasks = Task.objects.filter(project_id=project_id)
         # --- Аналіз завантаженості (Workload) ---
-        # Рахуємо тільки активні задачі (не Done) для кожного виконавця
+        # Рахує тільки активні задачі (не Done) для кожного виконавця
         workload = tasks.exclude(status='done').values(
             'assignee__id',
             'assignee__email',
@@ -78,11 +78,11 @@ class ProjectActivityLogView(generics.ListAPIView):
         project_id = self.kwargs['project_id']
         user = self.request.user
 
-        # 1. Якщо це адмін - віддаємо всі логи цього проєкту
+        # 1. Якщо це адмін - віддає всі логи цього проєкту
         if user.is_staff or user.is_superuser:
             return ProjectActivityLog.objects.filter(project_id=project_id)
 
-        # 2. Якщо це звичайний юзер - перевіряємо, чи є він учасником або власником
+        # 2. Якщо це звичайний юзер - перевіряє чи є він учасником або власником
         return ProjectActivityLog.objects.filter(
             project_id=project_id
         ).filter(

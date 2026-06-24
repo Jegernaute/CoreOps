@@ -20,7 +20,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = CoreCursorPagination
 
-    # --- ПІДКЛЮЧАЄМО ФІЛЬТРИ ---
+    # --- ПІДКЛЮЧАЄ ФІЛЬТРИ ---
     filter_backends = [
         DjangoFilterBackend,  # <--- Дозволяє фільтрувати по полях (?status=done)
         filters.SearchFilter,  # <--- Дозволяє шукати текстом (?search=bug)
@@ -38,7 +38,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     filterset_fields = ['project', 'status', 'priority', 'assignee', 'reporter', 'task_type']
 
     def get_queryset(self):
-        # Показуємо тільки задачі з проєктів, де користувач є учасником.
+        # Показує тільки задачі з проєктів, де користувач є учасником.
         # Адмін бачить все.
         user = self.request.user
 
@@ -50,7 +50,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        # Автоматично ставимо поточного юзера як Автора (Reporter)
+        # Автоматично ставить  поточного юзера як Автора (Reporter)
         serializer.save(reporter=self.request.user)
 
     def perform_destroy(self, instance):
@@ -63,30 +63,30 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         project_owner = instance.project.owner
 
-        # Визначаємо ролі
+        # Визначає ролі
         is_reporter = instance.reporter == user
         is_owner = user == project_owner
         is_admin = user.is_staff or user.is_superuser
 
         # --- 1. ПЕРЕВІРКА ЦІЛІСНОСТІ (History Protection) ---
-        # Якщо статус 'done', видаляти не можна нікому.
+        # Якщо статус 'done' видаляти не можна нікому.
         if instance.status == Task.STATUS_DONE:
-            raise ValidationError(
-                {"error": "Неможливо видалити завершену задачу. Це порушить історію проєкту."}
+            raise PermissionDenied(
+                "Заборонено видаляти завершену задачу. Це порушує цілісність історії."
             )
 
         # --- 2. ЛОГІКА ВЛАСНИКА (Super Access) ---
         # Власник проєкту може видалити задачу в будь-якому статусі (крім Done)
         if is_owner or is_admin:
             instance.delete()
-            return  # Успіх
+            return
 
         # --- 3. ЛОГІКА АВТОРА (Mistake Correction) ---
-        # Автор може виправити помилку, тільки поки задача не пішла в роботу
+        # Автор може виправити помилку тільки поки задача не пішла в роботу
         if is_reporter:
             if instance.status == Task.STATUS_TODO:
                 instance.delete()
-                return  # Успіх
+                return
             else:
                 raise PermissionDenied(
                     "Ви не можете видалити цю задачу, бо робота над нею вже почалася (статус не 'To Do'). Зверніться до менеджера."
