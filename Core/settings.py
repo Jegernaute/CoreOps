@@ -1,11 +1,13 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from celery.schedules import crontab
 from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -42,9 +44,9 @@ INSTALLED_APPS = [
 ]
 
 # --- CELERY SETTINGS ---
-# Використовуємо localhost, бо порт 6379 прокинутий з докера на машину
+# Використовує localhost, бо порт 6379 прокинутий з докера на машину
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0' # Або 'django-db'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -53,8 +55,17 @@ CELERY_RESULT_SERIALIZER = 'json'
 TIME_ZONE = 'Europe/Kyiv'
 CELERY_TIMEZONE = 'Europe/Kyiv'
 
-AUTH_USER_MODEL = 'users.CustomUser'  # Вказуємо нашу модель для авторезування
+AUTH_USER_MODEL = 'users.CustomUser'  # Вказує модель для авторезування
 
+# --- CACHE SETTINGS (Redis) ---
+# Використовує базу 1 (redis://localhost:6379/1) для кешу та Throttling,
+# щоб не змішувати з чергами Celery (які на базі 0)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://localhost:6379/1",
+    }
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -94,11 +105,11 @@ WSGI_APPLICATION = 'Core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'coreops_db',
-        'USER': 'coreops_user',
-        'PASSWORD': '123',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
     }
 }
 
@@ -153,6 +164,12 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'Core.pagination.CoreCursorPagination',
     'PAGE_SIZE': 20,
+
+'DEFAULT_THROTTLE_RATES': {
+        'login': '5/min',             # Максимум 5 спроб входу на хвилину з однієї IP
+        'register': '3/min',          # Захист від масового створення акаунтів ботами
+        'password_reset': '3/min',    # Захист від спаму листами на пошту
+    }
 }
 
 SIMPLE_JWT = {

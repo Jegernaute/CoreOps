@@ -11,9 +11,18 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from notifications.tasks import send_email_async
 from Core.pagination import CoreCursorPagination
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    Кастомний ендпоінт логіну з захистом від Brute-force.
+    Наслідує логіку SimpleJWT, але додає Throttling.
+    """
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
 class MeView(generics.RetrieveUpdateDestroyAPIView):
     """
@@ -44,16 +53,17 @@ class CreateInvitationView(generics.CreateAPIView):
     permission_classes = [permissions.IsAdminUser]  # Тільки адмін може запрошувати
 
     def perform_create(self, serializer):
-        # Автоматично додаємо, хто створив інвайт
+        # Автоматично додає хто створив інвайт
         serializer.save(sender=self.request.user)
 
 
 class RegisterByInviteView(APIView):
     """
     POST /users/register/ -> Реєстрація по токену
-    Body: { "token": "...", "password": "...", "first_name": "...", "last_name": "..." }
     """
     permission_classes = [permissions.AllowAny]  # Доступно всім (навіть без логіну)
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'register'
 
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
@@ -72,6 +82,8 @@ class PasswordResetRequestView(generics.GenericAPIView):
     """
     serializer_class = PasswordResetRequestSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -79,14 +91,14 @@ class PasswordResetRequestView(generics.GenericAPIView):
             email = serializer.validated_data['email']
             user = User.objects.get(email=email)
 
-            # 1. Генеруємо унікальний токен та ID
+            # 1. Генерує унікальний токен та ID
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
             token = PasswordResetTokenGenerator().make_token(user)
 
-            # 2. Формуємо "посилання" (для фронтенду)
+            # 2. Формує "посилання" (для фронтенду)
             reset_link = f"http://localhost:3000/reset-password/{uidb64}/{token}/"
 
-            # 3. Відправляємо лист
+            # 3. Відправляє лист
             email_body = f"Привіт, {user.first_name}!\n\nВи (або хтось інший) запросили зміну пароля.\nВикористовуйте це посилання:\n{reset_link}\n\nЯкщо ви цього не робили, просто ігноруйте цей лист."
 
             send_email_async.delay(
@@ -144,7 +156,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return User.objects.filter(is_active=True)
 
     def get_serializer_class(self):
-        # Якщо ми змінюємо дані або створюємо (тільки адмін) - повний доступ
+        # Якщо змінює дані або створює (тільки адмін) - повний доступ
         if self.action in ['update', 'partial_update', 'create']:
             return UserManageSerializer
         # Для списку і перегляду - тільки публічні дані
@@ -172,16 +184,16 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # --- ПОЧАТОК ЛОГІКИ ОЧИЩЕННЯ ---
 
-        # Імпортуємо тут, щоб не було циклічних помилок
+        # Імпортує тут щоб не було циклічних помилок
         from tasks.models import Task
         from projects.models import ProjectMember
 
-        # 2. Знімаємо юзера з активних задач (Assignee -> None)
-        # Шукаємо задачі, які ще НЕ зроблені (To Do, In Progress, Review)
+        # 2. Знімає юзера з активних задач (Assignee -> None)
+        # Шукає задачі які ще НЕ зроблені (To Do, In Progress, Review)
         active_tasks = Task.objects.filter(assignee=user).exclude(status=Task.STATUS_DONE)
         updated_tasks_count = active_tasks.update(assignee=None)
 
-        # 3. Видаляємо його зі списків учасників проєктів
+        # 3. Видаляє його зі списків учасників проєктів
         # (Щоб його не можна было вибрати у нових задачах)
         # Примітка: Це не видаляє проєкти, де він Owner, бо там стоїть on_delete=PROTECT в моделі Project
         deleted_memberships_count, _ = ProjectMember.objects.filter(user=user).delete()

@@ -16,9 +16,9 @@ services:
     image: postgres:15-alpine
     container_name: coreops_db
     environment:
-      POSTGRES_DB: coreops_db
-      POSTGRES_USER: coreops_user
-      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
