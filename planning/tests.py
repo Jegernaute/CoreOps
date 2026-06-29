@@ -10,19 +10,19 @@ User = get_user_model()
 class PlanningAPITests(APITestCase):
 
     def setUp(self):
-        # Створюємо двох Власників
+        # Створює двох Власників
         self.boss_a = User.objects.create_user(username='boss_a', email='boss_a@test.com', password='123')
         self.boss_b = User.objects.create_user(username='boss_b', email='boss_b@test.com', password='123')
 
-        # Створюємо Проєкт А (для boss_a)
+        # Створює Проєкт А (для boss_a)
         self.project_a = Project.objects.create(name="Project A", key="PRA", owner=self.boss_a)
         ProjectMember.objects.create(project=self.project_a, user=self.boss_a, role='owner')
 
-        # Створюємо Проєкт Б (для boss_b)
+        # Створює Проєкт Б (для boss_b)
         self.project_b = Project.objects.create(name="Project B", key="PRB", owner=self.boss_b)
         ProjectMember.objects.create(project=self.project_b, user=self.boss_b, role='owner')
 
-        # Створюємо валідний спринт у Проєкті Б
+        # Створює валідний спринт у Проєкті Б
         self.sprint_b = Sprint.objects.create(
             project=self.project_b,
             name="Sprint B",

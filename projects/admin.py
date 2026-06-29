@@ -26,7 +26,7 @@ class ProjectAdmin(admin.ModelAdmin):
     list_filter = ('status', 'priority')
     search_fields = ('name', 'key', 'description')
 
-    # Додаємо вкладки для швидкого редагування зв'язків
+    # Додає вкладки для швидкого редагування зв'язків
     inlines = [ProjectMemberInline, ProjectResourceInline, ProjectMilestoneInline]
 
 

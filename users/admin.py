@@ -26,7 +26,7 @@ class CustomUserAdmin(UserAdmin):
 
     # --- Магія Fieldsets ---
     # Це визначає, як групуються поля на сторінці редагування юзера.
-    # Ми беремо стандартні fieldsets від UserAdmin і додаємо свою секцію "Custom Info".
+    # Береться стандартні fieldsets від UserAdmin і додається своя секцію "Custom Info".
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('first_name', 'last_name', 'avatar')}),

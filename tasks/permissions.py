@@ -14,7 +14,7 @@ class IsAuthorOrProjectOwnerOrAdmin(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Визначаємо, хто є автором об'єкта.
+        # Визначає хто є автором об'єкта.
         # У TaskComment це поле 'author', а у TaskResource — 'uploaded_by'.
         object_author = getattr(obj, 'author', None) or getattr(obj, 'uploaded_by', None)
 
@@ -33,7 +33,7 @@ class IsAuthorOrProjectOwnerOrAdmin(permissions.BasePermission):
             if request.user == object_author:
                 return True
 
-            # Перевірка на Власника проєкту (дістаємося до нього через зв'язок obj -> task -> project)
+            # Перевірка на Власника проєкту (дістає до нього через зв'язок obj -> task -> project)
             if request.user == obj.task.project.owner:
                 return True
 

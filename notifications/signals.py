@@ -53,7 +53,7 @@ def task_notifications(sender, instance, created, **kwargs):
                 recipient_list=[new_assignee.email]
             )
 
-    #  ЗМІНА СТАТУСУ (Сповіщаємо автора)
+    #  ЗМІНА СТАТУСУ (Сповіщає автора)
     new_status = instance.status
     old_status = getattr(instance, '_old_status', None)
 

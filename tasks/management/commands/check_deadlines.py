@@ -8,7 +8,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(self.style.WARNING("⏳ Починаю перевірку дедлайнів..."))
 
-        # Ми викликаємо функцію напряму (без .delay), щоб побачити результат тут і зараз
+        # Ми викликає функцію напряму (без .delay), щоб побачити результат тут і зараз
         # (всередині неї листи все одно підуть через Celery)
         result = check_deadlines_periodic()
 

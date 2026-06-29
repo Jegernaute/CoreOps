@@ -4,7 +4,7 @@ from tasks.models import Task, TaskComment
 from .models import ProjectActivityLog
 
 
-# --- Слухаємо зміни в Задачах ---
+# --- Слухає зміни в Задачах ---
 @receiver(post_save, sender=Task)
 def log_task_changes(sender, instance, created, **kwargs):
     """
@@ -26,7 +26,7 @@ def log_task_changes(sender, instance, created, **kwargs):
     )
 
 
-# --- Слухаємо коментарі ---
+# --- Слухає коментарі ---
 @receiver(post_save, sender=TaskComment)
 def log_comments(sender, instance, created, **kwargs):
     if created:

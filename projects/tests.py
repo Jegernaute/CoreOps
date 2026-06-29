@@ -16,13 +16,13 @@ class ProjectAPITests(APITestCase):
         # Стороння людина
         self.stranger = User.objects.create_user(username='member_user',email='stranger@test.com', password='strongpassword123')
 
-        # Створюємо проєкт і додаємо Dev в учасники
+        # Створює проєкт і додаємо Dev в учасники
         self.project = Project.objects.create(
             name="Alpha Project",
             key="ALF",
             owner=self.owner
         )
-        # Додаємо учасника через m2m поле
+        # Додає учасника через m2m поле
         from projects.models import ProjectMember
         ProjectMember.objects.create(project=self.project, user=self.dev, role='member')
 

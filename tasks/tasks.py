@@ -11,7 +11,7 @@ def check_deadlines_periodic():
     Знаходить прострочені задачі і ставить в чергу (Worker) відправку листів.
     """
     now = timezone.now()
-    # Шукаємо прострочені задачі
+    # Шукає прострочені задачі
     overdue_tasks = Task.objects.filter(
         status__in=[Task.STATUS_TODO, Task.STATUS_IN_PROGRESS, Task.STATUS_REVIEW],
         due_date__lt=now,
@@ -23,7 +23,7 @@ def check_deadlines_periodic():
         subject = f"Дедлайн прострочено: {task.title}"
         message = f"Привіт! Дедлайн задачі '{task.title}' у проєкті '{task.project.name}' минув."
 
-        # Викликаємо відправку листа для кожної задачі окремо
+        # Викликає відправку листа для кожної задачі окремо
         send_email_async.delay(subject, message, [task.assignee.email])
         count += 1
 

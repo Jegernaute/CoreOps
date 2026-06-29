@@ -103,7 +103,7 @@ class TaskCommentViewSet(viewsets.ModelViewSet):
     POST /comments/ -> Створити коментар.
     """
     serializer_class = TaskCommentSerializer
-    # Підключаємо базову перевірку токена + нашу кастомну логіку (Автор/Власник/Адмін)
+    # Підключає базову перевірку токена + кастомну логіку (Автор/Власник/Адмін)
     permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
     pagination_class = CoreCursorPagination
 
@@ -137,7 +137,7 @@ class TaskCommentViewSet(viewsets.ModelViewSet):
             if not (is_member or is_owner):
                 raise PermissionDenied("Ви не можете коментувати задачу з проєкту, до якого не маєте доступу.")
 
-        # Зберігаємо коментар, примусово встановлюючи автора (захист від підробки)
+        # Зберігає коментар, примусово встановлюючи автора (захист від підробки)
         serializer.save(author=user)
 
 
@@ -175,5 +175,5 @@ class TaskResourceViewSet(viewsets.ModelViewSet):
             if not (is_member or is_owner):
                 raise PermissionDenied("Ви не можете завантажувати файли до задачі з чужого проєкту.")
 
-        # Зберігаємо файл, примусово встановлюючи того, хто завантажив
+        # Зберігає файл примусово встановлюючи того хто завантажив
         serializer.save(uploaded_by=user)

@@ -129,6 +129,13 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class UserCursorPagination(CoreCursorPagination):
+    """
+    Кастомна пагінація для User, оскільки в моделі немає поля created_at,
+    а використовується стандартне поле date_joined.
+    """
+    ordering = '-date_joined'
+
 class UserViewSet(viewsets.ModelViewSet):
     """
     Універсальний контролер:
@@ -138,7 +145,7 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
 
-    pagination_class = CoreCursorPagination
+    pagination_class = UserCursorPagination
     ordering = '-date_joined'
 
     filter_backends = [filters.SearchFilter]

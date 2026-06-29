@@ -1,5 +1,5 @@
 import csv
-from django.db.models import Q
+from django.db.models import Q, Count
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -26,7 +26,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsProjectOwnerOrAdmin]
     pagination_class = CoreCursorPagination
 
-    # 1. Підключаємо "двигуни" фільтрації
+    # 1. Підключає "двигуни" фільтрації
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
 
     # 2. По яких полях шукати (Search)
@@ -43,22 +43,26 @@ class ProjectViewSet(viewsets.ModelViewSet):
         Логіка видимості проєктів.
         """
         user = self.request.user
-        queryset = Project.objects.select_related('owner').prefetch_related('members')
+        queryset = Project.objects.select_related('owner').prefetch_related('members').annotate(
+            total_tasks=Count('tasks', distinct=True),
+            active_tasks=Count('tasks', filter=~Q(tasks__status='done'), distinct=True),
+            completed_tasks=Count('tasks', filter=Q(tasks__status='done'), distinct=True)
+        )
 
         # 1. Логіка "Хто бачить?"
         if user.is_staff or user.is_superuser:
             # Адмін бачить ВСІ проєкти в системі
             pass
         else:
-            # Використовуємо Q, щоб гарантувати доступ власнику,
+            # Використовує Q, щоб гарантувати доступ власнику,
             # навіть якщо він випадково зник з списку members.
             queryset = queryset.filter(
                 Q(owner=user) | Q(members__user=user)
             ).distinct()
 
         # 2. Логіка "Архівовані" (фільтрація)
-        # ВАЖЛИВА ЗМІНА: Ховаємо архів ТІЛЬКИ якщо це список (action == 'list').
-        # Якщо ми запитуємо конкретний ID (retrieve/update) - показуємо завжди,
+        # ВАЖЛИВА ЗМІНА: Ховає архів ТІЛЬКИ якщо це список (action == 'list').
+        # Якщо запитує конкретний ID (retrieve/update) - показує завжди,
         # щоб можна було відновити проєкт.
 
         if self.action == 'list':
@@ -69,7 +73,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return queryset
 
     def get_serializer_class(self):
-        # Для створення використовуємо спрощений серіалізатор
+        # Для створення використовується спрощений серіалізатор
         if self.action == 'create':
             return ProjectCreateSerializer
         return ProjectSerializer
@@ -81,10 +85,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         2. Автоматично додати автора як Project Owner у таблицю ProjectMember.
         """
         with transaction.atomic():  # Гарантує, що виконається або все, або нічого
-            # 1. Створюємо проєкт
+            # 1. Створює проєкт
             project = serializer.save(owner=self.request.user)
 
-            # 2. Додаємо запис у ProjectMember
+            # 2. Додає запис у ProjectMember
             ProjectMember.objects.create(
                 project=project,
                 user=self.request.user,
@@ -109,12 +113,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
         """
         project = self.get_object()  # 1. Перевірка прав (Permissions) спрацює тут
 
-        # 2. Передаємо проєкт у контекст серіалізатора!
+        # 2. Передає проєкт у контекст серіалізатора!
         serializer = AddProjectMemberSerializer(data=request.data, context={'project': project})
 
         # 3. Валідація (чи існує пошта? чи вже в команді?)
         if serializer.is_valid():
-            # Якщо ми тут — значить все ідеально.
+            # Якщо перевірка пройшла тут — значить все ідеально.
             # user вже знайдений всередині validate() і покладений в validated_data
             user = serializer.validated_data['user']
             role = serializer.validated_data['role']
@@ -131,7 +135,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
 
-        # Якщо помилка (нема пошти або дублікат) — повертаємо помилки серіалізатора
+        # Якщо помилка (нема пошти або дублікат) — повертає помилки серіалізатора
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['delete'], url_path='remove_member/(?P<user_id>\d+)')
@@ -146,23 +150,23 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if int(user_id) == project.owner.id:
             return Response({"error": "Власник не може видалити себе з проєкту."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Шукаємо і видаляємо запис у ProjectMember
+        # 2. Шукає і видаляє запис у ProjectMember
         member_record = get_object_or_404(ProjectMember, project=project, user_id=user_id)
 
         # Очищення задач (Unassign tasks) ---
         from tasks.models import Task  # Імпорт всередині, щоб уникнути циркулярних помилок
 
-        # Знаходимо всі задачі цього юзера В ЦЬОМУ проєкті, які ще не зроблені
+        # Знаходить всі задачі цього юзера В ЦЬОМУ проєкті, які ще не зроблені
         user_tasks = Task.objects.filter(
             project=project,
             assignee_id=user_id
         ).exclude(status=Task.STATUS_DONE)
 
-        # Очищаємо поле assignee
+        # Очищає поле assignee
         updated_count = user_tasks.update(assignee=None)
         # ----------------------------------------------------
 
-        # 3. Видаляємо учасника
+        # 3. Видаляє учасника
         member_record.delete()
 
         return Response(
@@ -176,21 +180,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
         Експорт задач проєкту у форматі CSV.
         Ендпоінт: GET /api/v1/projects/{id}/export_tasks/
         """
-        project = self.get_object()  # Отримуємо поточний проєкт
-        tasks = project.tasks.all()  # Дістаємо всі задачі (назва related_name може відрізнятися, перевір у своїй моделі Task)
+        project = self.get_object()  # Отримує поточний проєкт
+        tasks = project.tasks.all()  # Дістає всі задачі
 
-        # Створюємо HTTP-відповідь спеціально для файлу
+        # Створює HTTP-відповідь спеціально для файлу
         response = HttpResponse(content_type='text/csv')
-        # Вказуємо браузеру/Postman, що це файл для завантаження, і задаємо ім'я
+        # Вказує браузеру/Postman, що це файл для завантаження, і задає ім'я
         response['Content-Disposition'] = f'attachment; filename="tasks_project_{project.id}.csv"'
 
-        # Ініціалізуємо CSV-writer
+        # Ініціалізує CSV-writer
         writer = csv.writer(response)
 
-        # 1. Записуємо заголовки колонок (перший рядок)
+        # 1. Записує заголовки колонок (перший рядок)
         writer.writerow(['ID', 'Назва', 'Статус', 'Пріоритет', 'Виконавець', 'Створено'])
 
-        # 2. Проходимося циклом по задачах і записуємо дані
+        # 2. Проходимоться циклом по задачах і записує дані
         for task in tasks:
             writer.writerow([
                 task.id,
@@ -198,7 +202,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 task.status,
                 task.priority,
                 task.assignee.email if task.assignee else 'Не призначено',
-                task.created_at.strftime('%Y-%m-%d %H:%M')  # Форматуємо дату
+                task.created_at.strftime('%Y-%m-%d %H:%M')  # Форматує дату
             ])
 
         return response

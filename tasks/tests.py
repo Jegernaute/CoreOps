@@ -10,16 +10,16 @@ User = get_user_model()
 class TaskAPITests(APITestCase):
 
     def setUp(self):
-        # Створюємо користувачів
+        # Створює користувачів
         self.boss = User.objects.create_user(username='boss_user', email='boss@test.com', password='123')
         self.dev = User.objects.create_user(username='dev_user', email='dev@test.com', password='123')
 
-        # Створюємо проєкт і команду
+        # Створює проєкт і команду
         self.project = Project.objects.create(name="Task Project", key="TSK", owner=self.boss)
         ProjectMember.objects.create(project=self.project, user=self.boss, role='owner')
         ProjectMember.objects.create(project=self.project, user=self.dev, role='member')
 
-        # Створюємо 3 задачі з різними статусами
+        # Створює 3 задачі з різними статусами
         self.task_todo = Task.objects.create(
             project=self.project, title="To Do Task", status='to_do', reporter=self.dev
         )
@@ -30,7 +30,7 @@ class TaskAPITests(APITestCase):
             project=self.project, title="In Progress Task", status='in_progress', reporter=self.dev
         )
 
-        # Створюємо коментар від імені Dev
+        # Створює коментар від імені Dev
         self.comment = TaskComment.objects.create(
             task=self.task_todo, author=self.dev, content="Це коментар розробника"
         )

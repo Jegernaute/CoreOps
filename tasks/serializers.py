@@ -23,7 +23,7 @@ class TaskCommentSerializer(serializers.ModelSerializer):
 
 # --- Головний серіалізатор Задачі ---
 class TaskSerializer(serializers.ModelSerializer):
-    # Виводимо імена, щоб на фронті не показувати просто ID
+    # Виводить імена, щоб на фронті не показувати просто ID
     assignee_name = serializers.ReadOnlyField(source='assignee.get_full_name')
     reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
     project_name = serializers.ReadOnlyField(source='project.name')
@@ -50,17 +50,17 @@ class TaskSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """
         БІЗНЕС-ЛОГІКА:
-        1. Перевіряємо, чи має право АВТОР ЗАПИТУ створювати задачі в цьому проєкті.
-        2. Перевіряємо, чи є ASSIGNEE (Виконавець) учасником цього проєкту.
+        1. Перевіряє, чи має право АВТОР ЗАПИТУ створювати задачі в цьому проєкті.
+        2. Перевіряє, чи є ASSIGNEE (Виконавець) учасником цього проєкту.
         """
         request = self.context.get('request')
         current_user = request.user
 
         # --- ЛОГІКА СТВОРЕННЯ (Create) ---
         if not self.instance:
-            # Визначаємо проєкт (з вхідних даних або з існуючого об'єкта)
+            # Визначає проєкт (з вхідних даних або з існуючого об'єкта)
             # При створенні (POST) він у data['project'].
-            # При редагуванні (PATCH) він може бути не переданий, тоді беремо з instance.
+            # При редагуванні (PATCH) він може бути не переданий, тоді береться з instance.
             project = data.get('project')
 
             # --- ПЕРЕВІРКА 1: Чи "свій" той, хто створює задачу? ---
@@ -70,7 +70,7 @@ class TaskSerializer(serializers.ModelSerializer):
                 pass
             else:
                 if project:
-                    # Перевіряємо, чи є поточний юзер в таблиці учасників або власником
+                    # Перевіряє чи є поточний юзер в таблиці учасників або власником
                     is_member = ProjectMember.objects.filter(project=project, user=current_user).exists()
                     # Додаткова страховка: власник завжди має доступ, навіть якщо випадково випав з Member
                     is_owner = project.owner == current_user
@@ -104,7 +104,7 @@ class TaskSerializer(serializers.ModelSerializer):
                         "Завершену задачу не можна редагувати. Спочатку відновіть її (змініть статус)."
                     )
 
-                # Якщо статус змінюється (наприклад, на In Progress) — дозволяємо (це Reopen).
+                # Якщо статус змінюється (наприклад, на In Progress) — дозволяється (це Reopen).
 
             # 2. ПРАВА ДОСТУПУ (Хто може редагувати?)
             # Адмін і Власник — можуть все.
@@ -114,7 +114,7 @@ class TaskSerializer(serializers.ModelSerializer):
             if is_admin or is_project_owner:
                 pass
             else:
-                # Визначаємо ролі
+                # Визначає ролі
                 is_reporter = instance.reporter == current_user
                 is_assignee = instance.assignee == current_user
 
@@ -136,7 +136,7 @@ class TaskSerializer(serializers.ModelSerializer):
                             "Виконавець не має права перепризначати задачу. Зверніться до менеджера."
                         )
 
-            # Якщо при редагуванні змінюють виконавця, перевіряємо, чи він з нашої пісочниці
+            # Якщо при редагуванні змінюють виконавця, перевіряється, чи він з пісочниці
             new_assignee = data.get('assignee')
             if new_assignee:
                 project = instance.project

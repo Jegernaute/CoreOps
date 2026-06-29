@@ -85,7 +85,7 @@ class RegistrationSerializer(serializers.Serializer):
     last_name = serializers.CharField(required=True)
 
     def validate(self, data):
-        """Перевіряємо, чи існує такий активний токен"""
+        """Перевіряє, чи існує такий активний токен"""
 
         token = data.get('token')
 
@@ -123,7 +123,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        # Ми не повинні казати юзеру "такого мейла немає" (з міркувань безпеки),
+        # Не повинно вказуватися  юзеру "такого мейла немає" (з міркувань безпеки),
         # але для MVP можемо просто перевірити існування.
         if not User.objects.filter(email=value).exists():
             raise serializers.ValidationError("Користувача з таким email не знайдено.")
@@ -140,17 +140,17 @@ class SetNewPasswordSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         try:
-            # Декодуємо ID юзера
+            # Декодує ID юзера
             uid = force_str(urlsafe_base64_decode(attrs.get("uidb64")))
             user = User.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             raise serializers.ValidationError("Недійсне посилання для відновлення (UID Error).")
 
-        # Перевіряємо токен
+        # Перевіряє токен
         if not PasswordResetTokenGenerator().check_token(user, attrs.get("token")):
             raise serializers.ValidationError("Посилання недійсне або застаріло.")
 
-        attrs['user'] = user # Зберігаємо юзера, щоб використати у View
+        attrs['user'] = user # Зберігає юзера, щоб використати у View
         return attrs
 
     def save(self):

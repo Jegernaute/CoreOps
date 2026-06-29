@@ -20,28 +20,26 @@ class CustomUser(AbstractUser):
     ]
 
     # --- Основні поля ---
-    # Робимо email унікальним ідентифікатором для входу
+    # Робить email унікальним ідентифікатором для входу
     email = models.EmailField(_('email address'), unique=True)
 
     # Додаткова інфо
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name="Аватар")
-    job_title = models.CharField(max_length=100, blank=True, verbose_name="Посада (Global)")
+    job_title = models.CharField(max_length=100, blank=True, verbose_name="Посада")
 
     # Контакти
     phone = models.CharField(max_length=20, blank=True, verbose_name="Телефон")
     telegram = models.CharField(max_length=50, blank=True, verbose_name="Telegram (@username)") # пізніше можна переназвати
 
     # Права доступу (Глобальні)
-    global_role = models.CharField(
-        # в майбутньому краще прибрати або збільшити максимум довжину
-        max_length=10,
+    global_role = models.TextField(
         choices=GLOBAL_ROLE_CHOICES,
         default=ROLE_USER,
         verbose_name="Глобальна роль"
     )
 
     # --- Налаштування Auth ---
-    # Вказуємо, що логіном є email, а не username
+    # Вказує, що логіном є email, а не username
     USERNAME_FIELD = 'email'
     # Поля, які обов'язкові при створенні суперюзера (крім email та пароля)
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
@@ -72,7 +70,7 @@ class Invitation(models.Model):
     is_used = models.BooleanField(default=False, verbose_name="Використано")
 
     def save(self, *args, **kwargs):
-        # Якщо токен не задано, генеруємо його з UUID
+        # Якщо токен не задано, генерує його з UUID
         if not self.token:
             self.token = str(uuid.uuid4())
         super().save(*args, **kwargs)

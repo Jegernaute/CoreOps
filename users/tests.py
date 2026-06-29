@@ -9,7 +9,7 @@ class UserAPITests(APITestCase):
 
     def setUp(self):
         """Підготовка даних перед тестами"""
-        # Створюємо звичайного користувача (Member)
+        # Створює звичайного користувача (Member)
         self.member = User.objects.create_user(
             username='member_user',
             email='member@test.com',
@@ -18,7 +18,7 @@ class UserAPITests(APITestCase):
             last_name='Member'
         )
 
-        # Створюємо Адміністратора (Boss)
+        # Створює Адміністратора (Boss)
         self.admin = User.objects.create_superuser(
             username='admin_user',
             email='admin@test.com',
@@ -35,27 +35,27 @@ class UserAPITests(APITestCase):
             "first_name": "Іван",
             "last_name": "Тест"
         }
-        # Робимо POST запит без авторизації
+        # Робить POST запит без авторизації
         response = self.client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('token', response.data)  # Перевіряємо, що помилка саме через поле token
+        self.assertIn('token', response.data)  # Перевіряє, що помилка саме через поле token
 
     def test_tc_api_006_soft_delete_user(self):
         """TC-API-006: М'яке видалення користувача Адміном та перевірка блокування"""
         # Крок А: Видалення
         url_delete = f'/api/v1/users/{self.member.id}/'
-        self.client.force_authenticate(user=self.admin)  # Авторизуємося як Адмін
+        self.client.force_authenticate(user=self.admin)  # Авторизується як Адмін
         response_delete = self.client.delete(url_delete)
 
         self.assertEqual(response_delete.status_code, status.HTTP_200_OK)
 
-        # Переконуємось, що юзер став неактивним у базі (Soft Delete)
+        # Переконується, що юзер став неактивним у базі (Soft Delete)
         self.member.refresh_from_db()
         self.assertFalse(self.member.is_active)
 
         # Крок Б: Спроба логіну віддаленим користувачем
-        self.client.force_authenticate(user=None)  # Скидаємо авторизацію
+        self.client.force_authenticate(user=None)  # Скидає авторизацію
         url_token = '/api/v1/users/token/'
         data_login = {
             "email": "member@test.com",

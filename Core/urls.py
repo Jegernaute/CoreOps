@@ -5,12 +5,12 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/users/', include('users.urls')),  # <--- Підключаємо users шляхи
-    path('api/v1/projects/', include('projects.urls')), # <--- Підключаємо projects шляхи
-    path('api/v1/tasks/', include('tasks.urls')), # <--- Підключаємо tasks шляхи
-    path('api/v1/planning/', include('planning.urls')),  # <--- Підключаємо planning шляхи
-    path('api/v1/analytics/', include('analytics.urls')), # <--- Підключаємо analytics шляхи
-    path('api/v1/notifications/', include('notifications.urls')),# <--- Підключаємо notifications шляхи
+    path('api/v1/users/', include('users.urls')),  # <--- Підключає users шляхи
+    path('api/v1/projects/', include('projects.urls')), # <--- Підключає projects шляхи
+    path('api/v1/tasks/', include('tasks.urls')), # <--- Підключає tasks шляхи
+    path('api/v1/planning/', include('planning.urls')),  # <--- Підключає planning шляхи
+    path('api/v1/analytics/', include('analytics.urls')), # <--- Підключає analytics шляхи
+    path('api/v1/notifications/', include('notifications.urls')),# <--- Підключає notifications шляхи
 
     # --- SWAGGER ---
     # 1. Файл схеми (потрібен для роботи UI)

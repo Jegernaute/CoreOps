@@ -44,7 +44,7 @@ class SprintViewSet(viewsets.ModelViewSet):
         user = self.request.user
         project = serializer.validated_data['project']
 
-        # Перевіряємо, чи юзер є адміном або власником цього конкретного проєкту
+        # Перевіряє чи юзер є адміном або власником цього конкретного проєкту
         if not (user.is_staff or user.is_superuser or project.owner == user):
             raise PermissionDenied("Тільки Власник проєкту може планувати нові спринти.")
 
@@ -110,19 +110,19 @@ class SprintViewSet(viewsets.ModelViewSet):
 
         # Транзакція гарантує, що задачі та статус спринту оновляться СИНХРОННО
         with transaction.atomic():
-            # 1. Завершуємо поточний спринт і ставимо реальну дату
+            # 1. Завершує поточний спринт і ставимо реальну дату
             sprint.status = 'completed'
             sprint.actual_end_date = timezone.now().date()
             sprint.save()
 
-            # 2. Знаходимо всі НЕвиконані задачі (статус НЕ 'done')
+            # 2. Знаходить всі НЕвиконані задачі (статус НЕ 'done')
             unfinished_tasks = Task.objects.filter(sprint=sprint).exclude(status='done')
 
-            # 3. Переносимо задачі масовим оновленням (bulk update - працює дуже швидко)
+            # 3. Переносить задачі масовим оновленням (bulk update - працює дуже швидко)
             if next_sprint:
                 unfinished_tasks.update(sprint=next_sprint)
             else:
-                unfinished_tasks.update(sprint=None)  # Відправляємо в Backlog
+                unfinished_tasks.update(sprint=None)  # Відправляє в Backlog
 
         action_msg = "задачі перенесено у новий спринт." if next_sprint else "задачі повернуто у Backlog."
         return Response({"detail": f"Спринт успішно завершено, {action_msg}"}, status=status.HTTP_200_OK)
