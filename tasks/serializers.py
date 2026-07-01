@@ -21,31 +21,56 @@ class TaskCommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['author', 'created_at']
 
 
-# --- Головний серіалізатор Задачі ---
-class TaskSerializer(serializers.ModelSerializer):
-    # Виводить імена, щоб на фронті не показувати просто ID
+class TaskListSerializer(serializers.ModelSerializer):
+    """
+    Легкий серіалізатор для списку задач.
+    Віддає лічильники замість вкладених масивів.
+    """
     assignee_name = serializers.ReadOnlyField(source='assignee.get_full_name')
     reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
     project_name = serializers.ReadOnlyField(source='project.name')
+    project_key = serializers.ReadOnlyField(source='project.key')
 
-    # Вкладені дані (коментарі та файли) - тільки для читання
-    resources = TaskResourceSerializer(many=True, read_only=True)
-    comments = TaskCommentSerializer(many=True, read_only=True)
+    # Використовує анотовані поля з бази даних
+    comments_count = serializers.IntegerField(read_only=True)
+    resources_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Task
         fields = [
-            'id', 'project', 'project_name',
-            'title', 'description', 'task_type',
-            'status', 'priority',
+            'id', 'title', 'status', 'priority', 'task_type',
+            'assignee_name', 'reporter_name',
+            'project_name', 'project_key',
+            'comments_count', 'resources_count',
+            'sprint', 'estimated_hours', 'due_date'
+        ]
+
+
+
+class TaskDetailSerializer(serializers.ModelSerializer):
+    """
+    Важкий серіалізатор для конкретної задачі.
+    Містить усі поля + вкладені коментарі та ресурси.
+    """
+    assignee_name = serializers.ReadOnlyField(source='assignee.get_full_name')
+    reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
+    project_name = serializers.ReadOnlyField(source='project.name')
+    project_key = serializers.ReadOnlyField(source='project.key')
+
+    # Вкладені масиви
+    comments = TaskCommentSerializer(many=True, read_only=True)
+    resources = TaskResourceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'title', 'description', 'status', 'priority', 'task_type',
             'assignee', 'assignee_name',
             'reporter', 'reporter_name',
-            'milestone',
-            'estimated_hours', 'due_date',
-            'resources', 'comments',
-            'created_at', 'updated_at'
+            'project', 'project_name', 'project_key',
+            'comments', 'resources',
+            'sprint', 'estimated_hours', 'due_date', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['reporter', 'created_at', 'updated_at']
 
     def validate(self, data):
         """

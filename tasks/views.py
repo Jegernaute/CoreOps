@@ -2,10 +2,10 @@ from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Task, TaskComment, TaskResource
-from .serializers import TaskSerializer, TaskCommentSerializer, TaskResourceSerializer
+from .serializers import TaskListSerializer, TaskDetailSerializer, TaskCommentSerializer, TaskResourceSerializer
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, Count
 from .permissions import IsAuthorOrProjectOwnerOrAdmin
 from Core.pagination import CoreCursorPagination
 
@@ -16,7 +16,6 @@ class TaskViewSet(viewsets.ModelViewSet):
     POST /tasks/ -> Створити.
     """
 
-    serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = CoreCursorPagination
 
@@ -37,17 +36,31 @@ class TaskViewSet(viewsets.ModelViewSet):
     # Це додасть можливість писати: ?project=1&status=to_do&priority=high
     filterset_fields = ['project', 'status', 'priority', 'assignee', 'reporter', 'task_type']
 
+    def get_serializer_class(self):
+        """
+        Динамічний вибір серіалізатора для оптимізації Payload.
+        """
+        if self.action == 'list':
+            return TaskListSerializer
+
+        # Для action = 'retrieve' (GET /tasks/{id}/), 'create', 'update', 'partial_update'
+        return TaskDetailSerializer
+
     def get_queryset(self):
-        # Показує тільки задачі з проєктів, де користувач є учасником.
+        # Показує тільки задачі з проєктів де користувач є учасником.
         # Адмін бачить все.
         user = self.request.user
+        qs = Task.objects.select_related('project', 'assignee', 'reporter')
 
-        if user.is_staff or user.is_superuser:
-            return Task.objects.all()
+        if not (user.is_staff or user.is_superuser):
+            qs = qs.filter(project__members__user=user).distinct()
 
-        return Task.objects.filter(project__members__user=user).select_related(
-            'project', 'assignee', 'reporter'
-        ).distinct()
+        # Анотує кількість коментарів та вкладень на рівні БД (1 SQL запит)
+        qs = qs.annotate(
+            comments_count=Count('comments', distinct=True),
+            resources_count=Count('resources', distinct=True)
+        )
+        return qs
 
     def perform_create(self, serializer):
         # Автоматично ставить  поточного юзера як Автора (Reporter)
