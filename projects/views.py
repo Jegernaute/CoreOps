@@ -6,7 +6,6 @@ from rest_framework.response import Response
 from django.db import transaction
 from .models import Project, ProjectMember
 from .serializers import ProjectSerializer, ProjectCreateSerializer, AddProjectMemberSerializer
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
@@ -43,6 +42,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         Логіка видимості проєктів.
         """
         user = self.request.user
+
+        # Існуючі оптимізації (Big O(1) SQL агрегація)
         queryset = Project.objects.select_related('owner').prefetch_related('members').annotate(
             total_tasks=Count('tasks', distinct=True),
             active_tasks=Count('tasks', filter=~Q(tasks__status='done'), distinct=True),
@@ -60,7 +61,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 Q(owner=user) | Q(members__user=user)
             ).distinct()
 
-        # 2. Логіка "Архівовані" (фільтрація)
+        # 2. Логіка фільтрації списк
         # ВАЖЛИВА ЗМІНА: Ховає архів ТІЛЬКИ якщо це список (action == 'list').
         # Якщо запитує конкретний ID (retrieve/update) - показує завжди,
         # щоб можна було відновити проєкт.
@@ -68,7 +69,34 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             show_archived = self.request.query_params.get('show_archived')
             if not show_archived:
-                queryset = queryset.exclude(status='archived')
+                queryset = queryset.exclude(status=Project.STATUS_ARCHIVED)
+
+
+            # Фільтр статусів (підтримка через кому: ?status=in_progress,backlog)
+            statuses = self.request.query_params.get('status')
+            if statuses:
+                status_list = statuses.split(',')
+                queryset = queryset.filter(status__in=status_list)
+
+            # Фільтр активних задач (?has_active_tasks=true)
+            has_active = self.request.query_params.get('has_active_tasks')
+            if has_active:
+                if has_active.lower() == 'true':
+                    queryset = queryset.filter(active_tasks__gt=0)
+                elif has_active.lower() == 'false':
+                    queryset = queryset.filter(active_tasks=0)
+
+            # Фільтр завершеності (?is_completed=true)
+            is_completed = self.request.query_params.get('is_completed')
+            if is_completed:
+                from django.db.models import F
+                completed_condition = Q(status=Project.STATUS_COMPLETED) | Q(total_tasks__gt=0,
+                                                                             total_tasks=F('completed_tasks'))
+
+                if is_completed.lower() == 'true':
+                    queryset = queryset.filter(completed_condition)
+                elif is_completed.lower() == 'false':
+                    queryset = queryset.exclude(completed_condition)
 
         return queryset
 
@@ -194,7 +222,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # 1. Записує заголовки колонок (перший рядок)
         writer.writerow(['ID', 'Назва', 'Статус', 'Пріоритет', 'Виконавець', 'Створено'])
 
-        # 2. Проходимоться циклом по задачах і записує дані
+        # 2. Проходиться циклом по задачах і записує дані
         for task in tasks:
             writer.writerow([
                 task.id,

@@ -3,7 +3,7 @@
 .venv
 db.sqlite3
 .env
-avatars
+media
 task_attachments
 celerybeat-schedule.bak
 celerybeat-schedule.dat

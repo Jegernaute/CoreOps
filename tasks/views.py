@@ -1,3 +1,4 @@
+import django_filters
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +9,21 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
 from .permissions import IsAuthorOrProjectOwnerOrAdmin
 from Core.pagination import CoreCursorPagination
+
+# --- ДОДАНО КЛАС ФІЛЬТРАЦІЇ ---
+class TaskFilter(django_filters.FilterSet):
+    """
+    Кастомний фільтр для підтримки діапазонів дат.
+    """
+    due_date_after = django_filters.DateTimeFilter(field_name='due_date', lookup_expr='gte')
+    due_date_before = django_filters.DateTimeFilter(field_name='due_date', lookup_expr='lte')
+    # Додано фільтрацію за конкретною датою без урахування часу
+    due_date = django_filters.DateFilter(field_name='due_date', lookup_expr='date')
+
+    class Meta:
+        model = Task
+        fields = ['project', 'status', 'priority', 'assignee', 'reporter', 'task_type']
+
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -34,7 +50,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     # 3. Фільтрація по полях (Filtering)
     # Це додасть можливість писати: ?project=1&status=to_do&priority=high
-    filterset_fields = ['project', 'status', 'priority', 'assignee', 'reporter', 'task_type']
+    #  Підключено кастомний клас фільтрів замість filterset_fields
+    filterset_class = TaskFilter
 
     def get_serializer_class(self):
         """
