@@ -2,22 +2,28 @@ import django_filters
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Task, TaskComment, TaskResource
-from .serializers import TaskListSerializer, TaskDetailSerializer, TaskCommentSerializer, TaskResourceSerializer
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
+
+# ОНОВЛЕННЯ ІМПОРТІВ: додано нові моделі та серіалізатори
+from .models import Task, TaskComment, TaskResource, TaskChecklistItem, TaskHistoryEvent
+from .serializers import (
+    TaskListSerializer, TaskDetailSerializer, TaskCommentSerializer,
+    TaskResourceSerializer, TaskChecklistItemSerializer, TaskHistoryEventSerializer
+)
 from .permissions import IsAuthorOrProjectOwnerOrAdmin
 from Core.pagination import CoreCursorPagination
 
-# --- ДОДАНО КЛАС ФІЛЬТРАЦІЇ ---
+
+# --- КЛАС ФІЛЬТРАЦІЇ ---
 class TaskFilter(django_filters.FilterSet):
     """
     Кастомний фільтр для підтримки діапазонів дат.
     """
     due_date_after = django_filters.DateTimeFilter(field_name='due_date', lookup_expr='gte')
     due_date_before = django_filters.DateTimeFilter(field_name='due_date', lookup_expr='lte')
-    # Додано фільтрацію за конкретною датою без урахування часу
+    # фільтрація за конкретною датою без урахування часу
     due_date = django_filters.DateFilter(field_name='due_date', lookup_expr='date')
 
     class Meta:
@@ -49,8 +55,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     ordering_fields = ['priority', 'due_date', 'created_at']
 
     # 3. Фільтрація по полях (Filtering)
-    # Це додасть можливість писати: ?project=1&status=to_do&priority=high
-    #  Підключено кастомний клас фільтрів замість filterset_fields
+    # Підключено кастомний клас фільтрів замість filterset_fields
     filterset_class = TaskFilter
 
     def get_serializer_class(self):
@@ -80,8 +85,51 @@ class TaskViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        # Автоматично ставить  поточного юзера як Автора (Reporter)
-        serializer.save(reporter=self.request.user)
+        # Автоматично ставить поточного юзера як Автора (Reporter)
+        instance = serializer.save(reporter=self.request.user)
+
+        # Створено перший запис в історії
+        TaskHistoryEvent.objects.create(
+            task=instance,
+            actor=self.request.user,
+            action_type="task_created",
+            changes={"status": {"old_value": None, "new_value": instance.status}}
+        )
+
+    def perform_update(self, serializer):
+        """
+        Реалізовано Audit Log: порівнює стан 'до' і 'після' збереження.
+        """
+        instance = serializer.instance
+
+        # 1. Зафіксовано старий стан
+        old_status = instance.status
+        old_priority = instance.priority
+        old_assignee = instance.assignee.email if instance.assignee else None
+
+        # 2. Збережено оновлення
+        updated_instance = serializer.save()
+
+        # 3. Сформовано JSON змін
+        changes = {}
+        if old_status != updated_instance.status:
+            changes['status'] = {'old_value': old_status, 'new_value': updated_instance.status}
+
+        if old_priority != updated_instance.priority:
+            changes['priority'] = {'old_value': old_priority, 'new_value': updated_instance.priority}
+
+        new_assignee = updated_instance.assignee.email if updated_instance.assignee else None
+        if old_assignee != new_assignee:
+            changes['assignee'] = {'old_value': old_assignee, 'new_value': new_assignee}
+
+        # 4. Записано подію в історію, якщо є зміни
+        if changes:
+            TaskHistoryEvent.objects.create(
+                task=updated_instance,
+                actor=self.request.user,
+                action_type="task_updated",
+                changes=changes
+            )
 
     def perform_destroy(self, instance):
         """
@@ -207,3 +255,58 @@ class TaskResourceViewSet(viewsets.ModelViewSet):
 
         # Зберігає файл примусово встановлюючи того хто завантажив
         serializer.save(uploaded_by=user)
+
+
+class TaskChecklistViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для пунктів чекліста.
+    """
+    serializer_class = TaskChecklistItemSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
+
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['task']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return TaskChecklistItem.objects.all()
+
+        return TaskChecklistItem.objects.filter(
+            Q(task__project__members__user=user) | Q(task__project__owner=user)
+        ).distinct()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        task = serializer.validated_data['task']
+
+        if not (user.is_staff or user.is_superuser):
+            is_member = task.project.members.filter(user=user).exists()
+            is_owner = task.project.owner == user
+            if not (is_member or is_owner):
+                raise PermissionDenied("Ви не можете додавати чеклісти до цієї задачі.")
+
+        serializer.save()
+
+
+class TaskHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Тільки читання журналу подій задачі.
+    GET /history/?task=5 -> Отримати історію.
+    """
+    serializer_class = TaskHistoryEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = CoreCursorPagination
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['task']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return TaskHistoryEvent.objects.all()
+
+        return TaskHistoryEvent.objects.filter(
+            Q(task__project__members__user=user) | Q(task__project__owner=user)
+        ).distinct()

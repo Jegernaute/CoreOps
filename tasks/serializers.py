@@ -1,14 +1,45 @@
+import os
 from rest_framework import serializers
-from .models import Task, TaskResource, TaskComment
+from django.contrib.auth import get_user_model
+from .models import Task, TaskResource, TaskComment, TaskChecklistItem, TaskHistoryEvent
 from projects.models import ProjectMember
+
+User = get_user_model()
+
+
+# --- допоміжний серіалізатор для користувачів ---
+class UserMiniSerializer(serializers.ModelSerializer):
+    """
+    Міні-серіалізатор для вкладення об'єктів людей (Автора, Виконавця).
+    """
+    name = serializers.ReadOnlyField(source='get_full_name')
+
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'avatar']
 
 
 # --- Допоміжні серіалізатори ---
 class TaskResourceSerializer(serializers.ModelSerializer):
+    # Додано поля для метаданих файлів
+    file_size = serializers.SerializerMethodField()
+    file_extension = serializers.SerializerMethodField()
+
     class Meta:
         model = TaskResource
-        fields = ['id', 'task', 'name', 'resource_type', 'file', 'url', 'uploaded_by', 'created_at']
+        fields = ['id', 'task', 'name', 'resource_type', 'file', 'url', 'file_size', 'file_extension', 'uploaded_by',
+                  'created_at']
         read_only_fields = ['uploaded_by', 'created_at']
+
+    def get_file_size(self, obj):
+        if obj.file and hasattr(obj.file, 'size'):
+            return obj.file.size
+        return None
+
+    def get_file_extension(self, obj):
+        if obj.file and hasattr(obj.file, 'name'):
+            return os.path.splitext(obj.file.name)[1].lower()
+        return None
 
 
 class TaskCommentSerializer(serializers.ModelSerializer):
@@ -21,11 +52,33 @@ class TaskCommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['author', 'created_at']
 
 
+class TaskChecklistItemSerializer(serializers.ModelSerializer):
+    """
+    Серіалізатор для пунктів чекліста.
+    """
+
+    class Meta:
+        model = TaskChecklistItem
+        fields = ['id', 'task', 'content', 'is_completed']
+
+
+class TaskHistoryEventSerializer(serializers.ModelSerializer):
+    """
+    Серіалізатор для історії подій (Audit Log).
+    """
+    actor = UserMiniSerializer(read_only=True)
+
+    class Meta:
+        model = TaskHistoryEvent
+        fields = ['id', 'actor', 'action_type', 'changes', 'timestamp']
+
+
 class TaskListSerializer(serializers.ModelSerializer):
     """
     Легкий серіалізатор для списку задач.
     Віддає лічильники замість вкладених масивів.
     """
+    task_key = serializers.SerializerMethodField()
     assignee_name = serializers.ReadOnlyField(source='assignee.get_full_name')
     reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
     project_name = serializers.ReadOnlyField(source='project.name')
@@ -38,13 +91,15 @@ class TaskListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = [
-            'id', 'title', 'status', 'priority', 'task_type',
+            'id', 'task_key', 'title', 'status', 'priority', 'task_type',
             'assignee_name', 'reporter_name',
             'project_name', 'project_key',
             'comments_count', 'resources_count',
             'sprint', 'estimated_hours', 'due_date'
         ]
 
+    def get_task_key(self, obj):
+        return f"{obj.project.key}-{obj.id}"
 
 
 class TaskDetailSerializer(serializers.ModelSerializer):
@@ -52,25 +107,36 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     Важкий серіалізатор для конкретної задачі.
     Містить усі поля + вкладені коментарі та ресурси.
     """
-    assignee_name = serializers.ReadOnlyField(source='assignee.get_full_name')
-    reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
+    # Додано генерацію ключа
+    task_key = serializers.SerializerMethodField()
+
     project_name = serializers.ReadOnlyField(source='project.name')
     project_key = serializers.ReadOnlyField(source='project.key')
+
+    # Додано вкладені об'єкти користувачів для читання
+    assignee_details = UserMiniSerializer(source='assignee', read_only=True)
+    reporter_details = UserMiniSerializer(source='reporter', read_only=True)
 
     # Вкладені масиви
     comments = TaskCommentSerializer(many=True, read_only=True)
     resources = TaskResourceSerializer(many=True, read_only=True)
+    checklist = TaskChecklistItemSerializer(source='checklist_items', many=True, read_only=True)
 
     class Meta:
         model = Task
         fields = [
-            'id', 'title', 'description', 'status', 'priority', 'task_type',
-            'assignee', 'assignee_name',
-            'reporter', 'reporter_name',
+            'id', 'task_key', 'title', 'description', 'status', 'priority', 'task_type',
+            'assignee', 'assignee_details',
+            'reporter', 'reporter_details',
             'project', 'project_name', 'project_key',
-            'comments', 'resources',
+            'checklist', 'comments', 'resources',
             'sprint', 'estimated_hours', 'due_date', 'created_at', 'updated_at'
         ]
+
+        read_only_fields = ['reporter', 'created_at', 'updated_at']
+
+    def get_task_key(self, obj):
+        return f"{obj.project.key}-{obj.id}"
 
     def validate(self, data):
         """

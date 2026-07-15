@@ -136,3 +136,43 @@ class TaskComment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.author.email}"
+
+class TaskChecklistItem(models.Model):
+    """
+    Пункти чекліста для задачі (Підзадачі).
+    """
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='checklist_items')
+    content = models.CharField(max_length=500, verbose_name="Текст пункту")
+    is_completed = models.BooleanField(default=False, verbose_name="Стан виконання")
+
+    # Додано поле для збереження порядку/часу створення
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        status = "[x]" if self.is_completed else "[ ]"
+        return f"{status} {self.content}"
+
+
+class TaskHistoryEvent(models.Model):
+    """
+    Журнал подій (Audit Log) для конкретної задачі.
+    """
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='history_events')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                              verbose_name="Ініціатор зміни")
+
+    # Зафіксовано тип події
+    action_type = models.CharField(max_length=50, verbose_name="Тип дії")
+
+    # Реалізовано збереження стану 'до' і 'після' у форматі JSON
+    # Очікуваний формат: {"field": "status", "old_value": "to_do", "new_value": "in_progress"}
+    changes = models.JSONField(default=dict, blank=True, verbose_name="Деталі змін")
+
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name="Час події")
+
+    class Meta:
+        # Налаштовано сортування: найновіші події повертатимуться першими
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.task} | {self.action_type} by {self.actor}"
