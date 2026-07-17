@@ -114,6 +114,16 @@ class TaskResource(models.Model):
     ]
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='resources')
+
+    comment = models.ForeignKey(
+        'TaskComment',
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        null=True,
+        blank=True,
+        verbose_name="Коментар"
+    )
+
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
 
     name = models.CharField(max_length=255, blank=True, verbose_name="Назва")

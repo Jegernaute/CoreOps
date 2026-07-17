@@ -5,8 +5,6 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
-
-# ОНОВЛЕННЯ ІМПОРТІВ: додано нові моделі та серіалізатори
 from .models import Task, TaskComment, TaskResource, TaskChecklistItem, TaskHistoryEvent
 from .serializers import (
     TaskListSerializer, TaskDetailSerializer, TaskCommentSerializer,
@@ -15,6 +13,11 @@ from .serializers import (
 from .permissions import IsAuthorOrProjectOwnerOrAdmin
 from Core.pagination import CoreCursorPagination
 
+class HistoryCursorPagination(CoreCursorPagination):
+    """
+    Пагінація спеціально для Audit Log, оскільки там використовується timestamp, а не created_at.
+    """
+    ordering = '-timestamp'
 
 # --- КЛАС ФІЛЬТРАЦІЇ ---
 class TaskFilter(django_filters.FilterSet):
@@ -253,16 +256,53 @@ class TaskResourceViewSet(viewsets.ModelViewSet):
             if not (is_member or is_owner):
                 raise PermissionDenied("Ви не можете завантажувати файли до задачі з чужого проєкту.")
 
-        # Зберігає файл примусово встановлюючи того хто завантажив
-        serializer.save(uploaded_by=user)
+        # --- Автоматичне заповнення назви ---
+        name = serializer.validated_data.get('name', '').strip()
 
+        # Якщо фронт не передав назву (або передав порожню)
+        if not name:
+            resource_type = serializer.validated_data.get('resource_type')
+
+            if resource_type == 'file' and 'file' in serializer.validated_data:
+                # Береться оригінальна назва файлу (напр. "test_file.txt")
+                name = serializer.validated_data['file'].name
+            elif resource_type == 'url' and 'url' in serializer.validated_data:
+                # Якщо це посилання, просто записується сам URL як назва
+                name = serializer.validated_data['url']
+
+        # Зберігає ресурс, примусово встановлюючи автора та сформовану назву
+        serializer.save(uploaded_by=user, name=name)
+
+
+class IsTaskParticipant(permissions.BasePermission):
+    """
+    Кастомний дозвіл для чеклістів.
+    Дозволяє змінювати пункт тільки Адміну, Власнику проєкту, Автору задачі або її Виконавцю.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+
+        # 1. Адмінам можна все
+        if user.is_staff or user.is_superuser:
+            return True
+
+        # 2. Власнику проєкту можна все
+        if obj.task.project.owner == user:
+            return True
+
+        # 3. Автору та Виконавцю задачі можна ставити галочки
+        is_reporter = obj.task.reporter == user
+        is_assignee = obj.task.assignee == user
+
+        return is_reporter or is_assignee
 
 class TaskChecklistViewSet(viewsets.ModelViewSet):
     """
     CRUD для пунктів чекліста.
     """
     serializer_class = TaskChecklistItemSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAuthorOrProjectOwnerOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsTaskParticipant]
 
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['task']
@@ -297,7 +337,7 @@ class TaskHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = TaskHistoryEventSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = CoreCursorPagination
+    pagination_class = HistoryCursorPagination
 
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['task']

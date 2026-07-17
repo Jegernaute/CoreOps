@@ -27,8 +27,7 @@ class TaskResourceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskResource
-        fields = ['id', 'task', 'name', 'resource_type', 'file', 'url', 'file_size', 'file_extension', 'uploaded_by',
-                  'created_at']
+        fields = ['id', 'task', 'comment', 'name', 'resource_type', 'file', 'url', 'file_size', 'file_extension', 'uploaded_by', 'created_at']
         read_only_fields = ['uploaded_by', 'created_at']
 
     def get_file_size(self, obj):
@@ -46,9 +45,11 @@ class TaskCommentSerializer(serializers.ModelSerializer):
     author_name = serializers.ReadOnlyField(source='author.get_full_name')
     author_avatar = serializers.ImageField(source='author.avatar', read_only=True)
 
+    attachments = TaskResourceSerializer(many=True, read_only=True)
+
     class Meta:
         model = TaskComment
-        fields = ['id', 'task', 'author', 'author_name', 'author_avatar', 'content', 'created_at']
+        fields = ['id', 'task', 'author', 'author_name', 'author_avatar', 'content', 'attachments', 'created_at']
         read_only_fields = ['author', 'created_at']
 
 
