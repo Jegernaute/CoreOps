@@ -84,6 +84,8 @@ class TaskListSerializer(serializers.ModelSerializer):
     reporter_name = serializers.ReadOnlyField(source='reporter.get_full_name')
     project_name = serializers.ReadOnlyField(source='project.name')
     project_key = serializers.ReadOnlyField(source='project.key')
+    assignee_avatar = serializers.ImageField(source='assignee.avatar', read_only=True)
+    reporter_avatar = serializers.ImageField(source='reporter.avatar', read_only=True)
 
     # Використовує анотовані поля з бази даних
     comments_count = serializers.IntegerField(read_only=True)
@@ -96,7 +98,8 @@ class TaskListSerializer(serializers.ModelSerializer):
             'assignee_name', 'reporter_name',
             'project_name', 'project_key',
             'comments_count', 'resources_count',
-            'sprint', 'estimated_hours', 'due_date'
+            'sprint', 'estimated_hours', 'due_date','assignee_avatar',
+            'reporter_avatar'
         ]
 
     def get_task_key(self, obj):
@@ -150,21 +153,14 @@ class TaskDetailSerializer(serializers.ModelSerializer):
 
         # --- ЛОГІКА СТВОРЕННЯ (Create) ---
         if not self.instance:
-            # Визначає проєкт (з вхідних даних або з існуючого об'єкта)
-            # При створенні (POST) він у data['project'].
-            # При редагуванні (PATCH) він може бути не переданий, тоді береться з instance.
             project = data.get('project')
 
             # --- ПЕРЕВІРКА 1: Чи "свій" той, хто створює задачу? ---
-
-            # Якщо це Адмін — він пропускає перевірку "свій/чужий".
             if current_user.is_staff or current_user.is_superuser:
                 pass
             else:
                 if project:
-                    # Перевіряє чи є поточний юзер в таблиці учасників або власником
                     is_member = ProjectMember.objects.filter(project=project, user=current_user).exists()
-                    # Додаткова страховка: власник завжди має доступ, навіть якщо випадково випав з Member
                     is_owner = project.owner == current_user
 
                     if not (is_member or is_owner):
@@ -176,7 +172,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             assignee = data.get('assignee')
             if assignee and project:
                 is_assignee_member = ProjectMember.objects.filter(project=project, user=assignee).exists()
-                is_assignee_owner = project.owner == assignee  # Страховка: на власника теж можна вішати задачі
+                is_assignee_owner = project.owner == assignee
                 if not (is_assignee_member or is_assignee_owner):
                     raise serializers.ValidationError(
                         {"assignee": f"Користувач {assignee.email} не є учасником проєкту '{project.name}'."}
@@ -185,44 +181,45 @@ class TaskDetailSerializer(serializers.ModelSerializer):
         # --- ЛОГІКА РЕДАГУВАННЯ (Update) ---
         else:
             instance = self.instance
+            new_status = data.get('status')
+
+            # --- ЗАХИСТ ЧЕКЛІСТІВ ---
+            # Якщо статус намагаються змінити на Review або Done
+            if new_status and new_status in [Task.STATUS_REVIEW, Task.STATUS_DONE] and new_status != instance.status:
+                # Перевіряє, чи є хоча б один невиконаний пункт чекліста
+                has_uncompleted_items = instance.checklist_items.filter(is_completed=False).exists()
+                if has_uncompleted_items:
+                    raise serializers.ValidationError(
+                        {
+                            "status": "Неможливо перевести задачу на перевірку або завершити її, поки є невиконані підзадачі (чекліст)."}
+                    )
 
             # 1. ЗАХИСТ "DONE" ЗАДАЧ (Immutability)
             if instance.status == Task.STATUS_DONE:
-                new_status = data.get('status')
-
-                # Якщо юзер намагається змінити щось, НЕ змінюючи статус з Done на інший
                 if new_status == Task.STATUS_DONE or new_status is None:
                     raise serializers.ValidationError(
                         "Завершену задачу не можна редагувати. Спочатку відновіть її (змініть статус)."
                     )
 
-                # Якщо статус змінюється (наприклад, на In Progress) — дозволяється (це Reopen).
-
             # 2. ПРАВА ДОСТУПУ (Хто може редагувати?)
-            # Адмін і Власник — можуть все.
             is_admin = current_user.is_staff or current_user.is_superuser
             is_project_owner = instance.project.owner == current_user
 
             if is_admin or is_project_owner:
                 pass
             else:
-                # Визначає ролі
                 is_reporter = instance.reporter == current_user
                 is_assignee = instance.assignee == current_user
 
-                # Якщо ти "лівий" чувак (не автор, не виконавець, не власник)
                 if not (is_reporter or is_assignee):
                     raise serializers.ValidationError("Ви не маєте прав редагувати цю задачу.")
 
-                # Якщо це Виконавець (але не Автор), він не може змінювати Назву і Опис.
                 if is_assignee and not is_reporter:
-                    # 1. Не можна змінювати суть задачі
                     if 'title' in data or 'description' in data:
                         raise serializers.ValidationError(
                             "Виконавець може змінювати тільки статус. Зверніться до автора для зміни умов."
                         )
 
-                    # 2. Не можна "скидати" задачу (перепризначати)
                     if 'assignee' in data:
                         raise serializers.ValidationError(
                             "Виконавець не має права перепризначати задачу. Зверніться до менеджера."
